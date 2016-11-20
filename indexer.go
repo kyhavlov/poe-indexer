@@ -47,6 +47,7 @@ func NewIndexer() (*Indexer, error) {
 	file, err := os.Open(stashIndexFile)
 	if err != nil {
 		log.Printf("Error: %v", err)
+		log.Println("Initializing empty stash index...")
 		i.stashItems = make(map[string]map[string]bool)
 	} else {
 		decoder := gob.NewDecoder(file)
@@ -55,7 +56,8 @@ func NewIndexer() (*Indexer, error) {
 
 	bytes, err := ioutil.ReadFile(latestIdFile)
 	if err != nil {
-		log.Printf("error opening id file: %s", err)
+		log.Printf("Error opening id file: %s", err)
+		log.Println("Using initial id...")
 	} else {
 		i.currentID = string(bytes)
 	}
@@ -64,7 +66,7 @@ func NewIndexer() (*Indexer, error) {
 }
 
 func (i *Indexer) start() {
-	go i.parseUpdates()
+	go i.queryLoop()
 	go i.indexLoop()
 }
 
@@ -73,7 +75,8 @@ func (i *Indexer) shutdown() {
 	i.indexCh <- struct{}{}
 }
 
-func (i *Indexer) parseUpdates() {
+// queryLoop is the loop for querying the stash tab api
+func (i *Indexer) queryLoop() {
 	client := new(http.Client)
 	totalParsed := 0
 
@@ -85,7 +88,7 @@ func (i *Indexer) parseUpdates() {
 	for {
 		select {
 		case <-i.parseCh:
-			log.Println("parser stopped")
+			log.Println("Parser stopped")
 			return
 		case id := <-i.resetCh:
 			i.currentID = id
@@ -95,27 +98,27 @@ func (i *Indexer) parseUpdates() {
 
 		req, err := http.NewRequest("GET", "http://api.pathofexile.com/public-stash-tabs?id="+i.currentID, nil)
 		if err != nil {
-			log.Printf("error creating request: %v", err)
+			log.Printf("Error creating request: %v", err)
 			continue
 		}
 
 		start := time.Now()
 		response, err := client.Do(req)
 		if err != nil {
-			log.Printf("error getting request: %v", err)
+			log.Printf("Error getting request: %v", err)
 			continue
 		}
 		defer response.Body.Close()
 		bytes, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			log.Printf("error reading response body: %v", err)
+			log.Printf("Error reading response body: %v", err)
 			continue
 		}
 
 		var stashes StashTabResponse
 		err = json.Unmarshal(bytes, &stashes)
 		if err != nil {
-			log.Printf("error parsing json: %v", err)
+			log.Printf("Error parsing json: %v", err)
 			log.Printf("len: %v", len(bytes))
 			continue
 		}
@@ -123,14 +126,14 @@ func (i *Indexer) parseUpdates() {
 
 		if stashes.NextChangeID != i.currentID {
 			totalParsed += i.ingestResponse(&stashes)
-			log.Printf("total parsed: %d", totalParsed)
-			log.Printf("parsed stash page: %q", stashes.ID)
+			log.Printf("Total parsed: %d", totalParsed)
+			log.Printf("Parsed stash page: %q", stashes.ID)
 		} else {
 			log.Println("Reached the end of the stream, waiting 1s for updates...")
 			time.Sleep(1 * time.Second)
 		}
 
-		// Sleep so we don't request too frequently
+		// Sleep so we don't request too frequently (more than once per second)
 		end := time.Now()
 		diff := end.Sub(start)
 		if diff < time.Second {
@@ -141,13 +144,15 @@ func (i *Indexer) parseUpdates() {
 	}
 }
 
+// ingestResponse takes a stash tab api response, compares it to our local mapping
+// to check for item removals, and sends the new items/removals to the indexer
+// goroutine for storage
 func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 	var selected []*Item
 	deletions := make(map[string]int64)
 
 	for _, stash := range tabs.Stashes {
 		tabItems := make(map[string]bool)
-		//log.Printf("stash tab ID: %q, items: %d", stash.ID, len(stash.Items))
 
 		for _, item := range stash.Items {
 			if strings.HasPrefix(item.Note, "~price") || strings.HasPrefix(item.Note, "~b") {
@@ -181,7 +186,7 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 				}
 			}
 
-			// remove the tab if it's now empty
+			// Remove the tab if it's now empty
 			if len(tabItems) == 0 {
 				delete(i.stashItems, stash.ID)
 				log.Printf("Deleting empty tab: %q", stash.ID)
@@ -193,6 +198,7 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 		}
 	}
 
+	// Send the updates to be indexed
 	i.itemCh <- &itemBatch{
 		items:     selected,
 		deletions: deletions,
@@ -202,12 +208,13 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 	return len(selected)
 }
 
+// indexLoop receives itemBatch updates over indexCh and applies them to elasticsearch
 func (i *Indexer) indexLoop() {
 	totalIndexed := 0
 	for {
 		select {
 		case <-i.indexCh:
-			log.Println("indexer stopped")
+			log.Println("Indexer stopped")
 			return
 		case batch := <-i.itemCh:
 			err := i.indexBatch(batch)
@@ -222,12 +229,13 @@ func (i *Indexer) indexLoop() {
 				}
 
 				totalIndexed += len(batch.items)
-				log.Printf("total indexed: %d", totalIndexed)
+				log.Printf("Total indexed: %d", totalIndexed)
 			}
 		}
 	}
 }
 
+// indexBatch applies a batch of updates/deletions to the elasticsearch as a bulk update
 func (i *Indexer) indexBatch(batch *itemBatch) error {
 	if len(batch.items) == 0 && len(batch.deletions) == 0 {
 		return nil
@@ -249,7 +257,7 @@ func (i *Indexer) indexBatch(batch *itemBatch) error {
 		body.WriteString(fmt.Sprintf(`{"doc_as_upsert":true,"doc":{"removed":%d}}`+"\n", removeDate))
 	}
 
-	req, err := http.NewRequest("POST", "http://linux-server:9200/items/item/_bulk", body)
+	req, err := http.NewRequest("POST", "http://"+elasticsearchUrl+"/items/item/_bulk", body)
 	if err != nil {
 		return err
 	}
@@ -264,13 +272,14 @@ func (i *Indexer) indexBatch(batch *itemBatch) error {
 		log.Printf("Error: status code %d", resp.StatusCode)
 		log.Printf("Headers: %v", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
-		log.Println("response Body:", string(body))
+		log.Println("Response Body:", string(body))
 		return fmt.Errorf("Unexpected status code %d", resp.StatusCode)
 	}
 
 	return nil
 }
 
+// persistStashIndex saves the in-memory mapping of stash ID to item IDs to a file
 func (i *Indexer) persistStashIndex() error {
 	file, err := os.Create(stashIndexFile)
 	if err != nil {
@@ -284,7 +293,16 @@ func (i *Indexer) persistStashIndex() error {
 	return nil
 }
 
+// persistLatestID persists a given stash tab api page id to our elasticsearch meta document
 func (i *Indexer) persistLatestID(id string) error {
 	body := fmt.Sprintf(`{"latest_id":"%s"}`, id)
-	return doRequest(&http.Client{}, "PUT", "linux-server:9200/meta/info/1", bytes.NewBufferString(body), nil)
+	return doRequest(&http.Client{}, "PUT", elasticsearchUrl+"/meta/info/1", bytes.NewBufferString(body), nil)
+}
+
+// standardPriceFilter is a basic item filter for grabbing items in Standard with a price
+func standardPriceFilter(item *Item) bool {
+	if item.Price != "" && item.League == "Standard" {
+		return true
+	}
+	return false
 }
