@@ -15,13 +15,22 @@ func rebuildStashIndex() {
 	client := new(http.Client)
 
 	scrollUrl := elasticsearchUrl + "/items/item/_search?pretty=1&scroll=10m"
+
+	// Query for all the items that haven't been removed yet
 	scrollRequest := `{
-  	"from": 0, "size" : 10000,
-      "query": {
-          "exists" : { "field" : "id" }
-      },
-      "_source": ["id", "stashId"]
-  }`
+	"from": 0,
+	"size": 10000,
+	"query": {
+		"bool": {
+			"must": {
+				"exists": {"field": "id"}
+			},
+			"must_not": {
+				"exists": {"field": "removed"}
+			}
+		}
+	},
+	"_source": ["id", "stashId"]}`
 
 	var scrollResp ScrollResponse
 	err := doRequest(client, "POST", scrollUrl, bytes.NewBufferString(scrollRequest), &scrollResp)
@@ -40,9 +49,6 @@ func rebuildStashIndex() {
 		}
 
 		for _, hit := range scrollResp.Hits.Hits {
-			if hit.Source.Removed == 0 {
-				continue
-			}
 			if _, ok := i.stashItems[hit.Source.StashID]; !ok {
 				i.stashItems[hit.Source.StashID] = make(map[string]bool)
 			}
@@ -100,14 +106,6 @@ func doRequest(client *http.Client, method, url string, body io.Reader, out inte
 	return nil
 }
 
-const query = `{
-	"from": %s, "size": %s,
-    "query": {
-        "exists" : { "field" : "id" }
-    },
-    "_source": ["id", "stashId", "removed"]
-}`
-
 type ScrollResponse struct {
 	ScrollID string `json:"_scroll_id"`
 	Hits     struct {
@@ -116,7 +114,6 @@ type ScrollResponse struct {
 			Source struct {
 				StashID string `json:"stashId"`
 				ID      string `json:"id"`
-				Removed int64  `json:"removed"`
 			} `json:"_source"`
 		} `json:"hits"`
 	} `json:"hits"`

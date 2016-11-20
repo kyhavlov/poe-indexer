@@ -59,7 +59,7 @@ func NewIndexer() (*Indexer, error) {
 		log.Printf("Error opening id file: %s", err)
 		log.Println("Using initial id...")
 	} else {
-		i.currentID = string(bytes)
+		i.currentID = strings.TrimSpace(string(bytes))
 	}
 
 	return i, nil
