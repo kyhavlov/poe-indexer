@@ -267,6 +267,7 @@ func (i *Indexer) indexBatch(batch *itemBatch) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		log.Printf("Error: status code %d", resp.StatusCode)

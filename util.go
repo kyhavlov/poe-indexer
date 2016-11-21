@@ -79,6 +79,7 @@ func doRequest(client *http.Client, method, url string, body io.Reader, out inte
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		log.Printf("Error: status code %d", resp.StatusCode)
