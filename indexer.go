@@ -109,6 +109,7 @@ func (i *Indexer) queryLoop() {
 			continue
 		}
 		defer response.Body.Close()
+
 		bytes, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			log.Printf("Error reading response body: %v", err)
@@ -169,6 +170,7 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 					item.Created = item.LastUpdated
 				}
 				item.Name = strings.TrimPrefix(item.Name, "<<set:MS>><<set:M>><<set:S>>")
+				item.TypeLine = strings.TrimPrefix(item.TypeLine, "<<set:MS>><<set:M>><<set:S>>")
 				item.Account = stash.AccountName
 				item.StashID = stash.ID
 
