@@ -36,7 +36,7 @@ type itemBatch struct {
 
 func NewIndexer() (*Indexer, error) {
 	i := &Indexer{
-		filterFunc: standardPriceFilter,
+		filterFunc: EssenceFilter,
 		itemCh:     make(chan *itemBatch, 1024),
 		parseCh:    make(chan struct{}, 0),
 		indexCh:    make(chan struct{}, 0),
@@ -299,9 +299,9 @@ func (i *Indexer) persistLatestID(id string) error {
 	return doRequest(&http.Client{}, "PUT", elasticsearchUrl+"/meta/info/1", bytes.NewBufferString(body), nil)
 }
 
-// standardPriceFilter is a basic item filter for grabbing items in Standard with a price
-func standardPriceFilter(item *Item) bool {
-	if item.Price != "" && item.League == "Standard" {
+// EssenceFilter is a basic item filter for grabbing items in Essence with a price
+func EssenceFilter(item *Item) bool {
+	if item.Price != "" && item.League == "Essence" {
 		return true
 	}
 	return false

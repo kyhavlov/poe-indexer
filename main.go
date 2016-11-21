@@ -6,7 +6,7 @@ import (
 	"os/signal"
 )
 
-const elasticsearchUrl = "linux-server:9200"
+const elasticsearchUrl = "192.168.1.4:9200"
 
 func main() {
 	/*rebuildStashIndex()
