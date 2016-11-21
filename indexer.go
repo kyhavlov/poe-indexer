@@ -41,7 +41,7 @@ func NewIndexer() (*Indexer, error) {
 		parseCh:    make(chan struct{}, 0),
 		indexCh:    make(chan struct{}, 0),
 		doneCh:     make(chan struct{}, 0),
-		resetCh:    make(chan string, 1),
+		resetCh:    make(chan string, 512),
 	}
 
 	file, err := os.Open(stashIndexFile)
