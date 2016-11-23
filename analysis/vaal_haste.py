@@ -22,6 +22,8 @@ results = es.search(index="items", body={
 })
 
 # A mapping of currency types to their value in chaos orbs
+# source: http://poe.ninja/esc/currency
+# TODO: scrape and index these currency values every day for more accurate prices
 currency_values = {
     "chaos": 1.0,
     "vaal": 1.4,
@@ -35,13 +37,14 @@ currency_values = {
     "fuse": 1.0/2.2,
 }
 
+# initialize the columns to use
 level = []
 quality = []
 price = []
 
 items = []
+# format item documents to be easier to use
 for item in results['hits']['hits']:
-    # format item data
     def cleanProperties(item, name):
         properties = {}
         if name in item:
@@ -78,7 +81,7 @@ for item in results['hits']['hits']:
     price.append(i['price_chaos'])
 
 
-# Format the results into
+# Format the results into pandas dataframes
 n = len(price)/6
 df_train = pd.DataFrame({'level': pd.Series(level[n:]),
                          'quality': pd.Series(quality[n:]),
@@ -93,13 +96,16 @@ print(df_train)
 print("Test data:")
 print(df_test)
 
+# Continuous means the variable is a number instead of something discrete, like a mod name
 CONTINUOUS_COLUMNS = [
     'level',
     'quality',
 ]
+
+# price is our column to predict
 LABEL_COLUMN = 'price'
 
-
+# input_fn takes a pandas dataframe and returns some input columns and an output column
 def input_fn(df):
     # Creates a dictionary mapping from each continuous feature column name (k) to
     # the values of that column stored in a constant Tensor.
@@ -117,6 +123,7 @@ def train_input_fn():
 def eval_input_fn():
     return input_fn(df_test)
 
+# set up some tensorflow column names
 level = tf.contrib.layers.real_valued_column('level')
 quality = tf.contrib.layers.real_valued_column('quality')
 
@@ -131,6 +138,7 @@ results = model.evaluate(input_fn=eval_input_fn, steps=1)
 for key in sorted(results):
     print "%s: %s" % (key, results[key])
 
+# predict the price of a single level 20, 0 quality vaal haste
 df_pred = pd.DataFrame({'level': pd.Series([20]),
                         'quality': pd.Series([0]),
                         'price': pd.Series()})
