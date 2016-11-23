@@ -37,11 +37,11 @@ type itemBatch struct {
 func NewIndexer() (*Indexer, error) {
 	i := &Indexer{
 		filterFunc: EssenceFilter,
-		itemCh:     make(chan *itemBatch, 1024),
+		itemCh:     make(chan *itemBatch, 4),
 		parseCh:    make(chan struct{}, 0),
 		indexCh:    make(chan struct{}, 0),
 		doneCh:     make(chan struct{}, 0),
-		resetCh:    make(chan string, 512),
+		resetCh:    make(chan string, 4),
 	}
 
 	file, err := os.Open(stashIndexFile)
