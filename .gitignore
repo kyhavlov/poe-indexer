@@ -1,0 +1,8 @@
+*.idea
+*.exe
+*.pyc
+*.json
+*.csv
+
+latest_id
+stash_index.dat

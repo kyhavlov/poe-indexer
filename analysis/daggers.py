@@ -10,11 +10,11 @@ es = Elasticsearch(hosts=["192.168.1.4:9200"])
 
 # Query elasticsearch for the items to use for the data set
 results = es.search(index="items", body={
-    "size": 200,
+    "size": 5,
     "query": {
         "bool": {
             "must": [{
-                "match_phrase": {"typeLine": "Vaal Haste"}
+                "match_phrase": {"properties.name": "Dagger"}
             }, {
                 "script": {
                     "script": "doc['removed'].value >  doc['last_updated'].value"
@@ -25,46 +25,57 @@ results = es.search(index="items", body={
 })
 
 # Initialize the columns to use
-level = []
-quality = []
-price = []
+COLUMNS = [
+    'ilvl',
+    'corrupted',
+    'Quality',
+    'Physical Damage',
+    'Critical Strike Chance',
+    'Attacks per Second'
+]
+'''for i in range(5):
+    COLUMNS.append('prop%s' % i)
+    COLUMNS.append('prop%s_name' % i)'''
+COLUMNS.append('price_chaos')
+data = {}
+for c in COLUMNS:
+    data[c] = []
 
 items = []
 # Fill out the columns
 for item in results['hits']['hits']:
+    # Do basic formatting of the item
     i = util.format_item(item['_source'])
     if i is not None:
         items.append(i)
     else:
         continue
 
-    if i['price_chaos'] < 6.0 or i['price_chaos'] > 25.0:
-        continue
-
-    # set up data set
-    util.prop_or_default(i, 'Level', 0)
-    level.append(i['Level'])
     util.prop_or_default(i, 'Quality', 0)
-    quality.append(i['Quality'])
+    util.prop_or_default(i, 'Physical Damage', 0.0)
+    util.prop_or_default(i, 'Critical Strike Chance', 0.0)
+    util.prop_or_default(i, 'Attacks per Second', 0.0)
 
-    price.append(i['price_chaos'])
+    # add each column for this item
+    for c in COLUMNS:
+        if c in i:
+            data[c].append(i[c])
 
 
 # Format the results into pandas dataframes
-n = len(price)/6
-df_train = pd.DataFrame({'level': pd.Series(level[n:]),
-                         'quality': pd.Series(quality[n:]),
-                         'price': pd.Series(price[n:])})
-df_test = pd.DataFrame({'level': pd.Series(level[:n]),
-                         'quality': pd.Series(quality[:n]),
-                         'price': pd.Series(price[:n])})
+percent_test = 20
+n = (len(items) * percent_test)/100
+df_train = pd.DataFrame({k: pd.Series(data[k][:-n]) for k in data})
+df_test = pd.DataFrame({k: pd.Series(data[k][-n:]) for k in data})
 
-print("Got %d Hits:" % results['hits']['total'])
+#df_train.to_csv('daggers.csv')
+
+print("Got %d Hits:" % len(items))
 print("Training data:")
 print(df_train)
 print("Test data:")
 print(df_test)
-
+'''
 # Continuous means the variable is a number instead of something discrete, like a mod name
 CONTINUOUS_COLUMNS = [
     'level',
@@ -108,8 +119,8 @@ for key in sorted(results):
     print "%s: %s" % (key, results[key])
 
 # predict the price of a single level 20, 0 quality vaal haste
-df_pred = pd.DataFrame({'level': pd.Series([1, 1, 20, 20]),
-                        'quality': pd.Series([0, 20, 0, 20]),
+df_pred = pd.DataFrame({'level': pd.Series([1, 16, 20, 20]),
+                        'quality': pd.Series([0, 15, 0, 20]),
                         'price': pd.Series()})
 
 def predict_fn():
@@ -117,3 +128,4 @@ def predict_fn():
 
 prediction = model.predict(input_fn=predict_fn)
 print(prediction)
+'''

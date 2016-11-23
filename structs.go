@@ -37,7 +37,7 @@ type Item struct {
 	Name              string    `json:"name"`
 	TypeLine          string    `json:"typeLine"`
 	Identified        bool      `json:"identified"`
-	Corrupted         bool      `json:"corrupted,omitempty"`
+	Corrupted         bool      `json:"corrupted"`
 	LockedToCharacter bool      `json:"lockedToCharacter"`
 	Note              string    `json:"note,omitempty"`
 	FrameType         int       `json:"frameType"`
