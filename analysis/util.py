@@ -11,10 +11,10 @@ def clean_properties(item, name):
 
             if len(values) == 1:
                 v = values[0]
-                v = v.rstrip('%')
-                v = v.lstrip('+')
-                v = v.rstrip(' sec')
-                v = v.rstrip(' (Max)')
+                v = v.replace('%', '')
+                v = v.replace('+', '')
+                v = v.replace(' sec', '')
+                v = v.replace(' (Max)', '')
 
                 if '-' in v:
                     halves = v.split("-")
@@ -39,6 +39,26 @@ def prop_or_default(item, name, default):
         item[name] = default
 
 
+def req_or_default(item, name, default):
+    if name in item['requirements']:
+        item[name] = item['requirements'][name]
+    else:
+        item[name] = default
+
+
+def format_mod(text):
+    numbers = re.findall('(\d+\.?\d*)', text)
+    if len(numbers) > 2:
+        raise Exception("3 numbers in mod!!! " + text)
+    if len(numbers) == 0:
+        return text, 0.0
+    new_text = text.replace(numbers[0], "X")
+    if len(numbers) == 1:
+        return new_text, float(numbers[0])
+    new_text = new_text.replace(numbers[1], "Y")
+    return new_text, (float(numbers[0]) + float(numbers[1]))/2
+
+
 # Formats items to make them easier to process
 def format_item(item):
     # Ignore this item if it only moved tabs and wasn't sold, or if the buyout's too low
@@ -47,6 +67,8 @@ def format_item(item):
 
     if 'corrupted' not in item:
         item['corrupted'] = False
+
+    item['typeLine'] = item['typeLine'].replace('<<set:MS>><<set:M>><<set:S>>', '')
 
     item['properties'] = clean_properties(item, 'properties')
     item['additionalProperties'] = clean_properties(item, 'additionalProperties')
@@ -73,5 +95,10 @@ currency_values = {
     "alch": 1.0/3.6,
     "chisel": 1.0/2.6,
     "fuse": 1.0/2.2,
+    "jew": 1.0/9.5,
+    "scour": 1.2,
+    "regal": 1.1,
+    "chrom": 1.0/9.2,
+    "gcp": 1.3,
 }
 

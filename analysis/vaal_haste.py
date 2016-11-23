@@ -1,6 +1,5 @@
 from elasticsearch import Elasticsearch
 import pandas as pd
-import re
 import tensorflow as tf
 from tensorflow.contrib.learn import DNNRegressor
 import tempfile
@@ -10,7 +9,7 @@ es = Elasticsearch(hosts=["192.168.1.4:9200"])
 
 # Query elasticsearch for the items to use for the data set
 results = es.search(index="items", body={
-    "size": 200,
+    "size": 10000,
     "query": {
         "bool": {
             "must": [{
@@ -99,7 +98,7 @@ quality = tf.contrib.layers.real_valued_column('quality')
 deep_columns = [level, quality]
 
 model_dir = tempfile.mkdtemp()
-model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[100, 50])
+model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[100, 200, 50])
 
 model.fit(input_fn=train_input_fn, steps=200)
 
