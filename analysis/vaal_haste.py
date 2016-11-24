@@ -1,9 +1,11 @@
 from elasticsearch import Elasticsearch
 import pandas as pd
+from sklearn import metrics
 import tensorflow as tf
 from tensorflow.contrib.learn import DNNRegressor
 import tempfile
 import util
+tf.logging.set_verbosity(tf.logging.INFO)
 
 es = Elasticsearch(hosts=["192.168.1.4:9200"])
 
@@ -54,15 +56,21 @@ n = len(price)/6
 df_train = pd.DataFrame({'level': pd.Series(level[n:]),
                          'quality': pd.Series(quality[n:]),
                          'price': pd.Series(price[n:])})
+print(df_train)
+train_x = df_train.as_matrix(['level', 'quality'])
+train_y = df_train.as_matrix(['price'])
+
 df_test = pd.DataFrame({'level': pd.Series(level[:n]),
                          'quality': pd.Series(quality[:n]),
                          'price': pd.Series(price[:n])})
+test_x = df_train.as_matrix(['level', 'quality'])
+test_y = df_train.as_matrix(['price'])
 
-print("Got %d Hits:" % results['hits']['total'])
+'''print("Got %d Hits:" % results['hits']['total'])
 print("Training data:")
 print(df_train)
 print("Test data:")
-print(df_test)
+print(df_test)'''
 
 # Continuous means the variable is a number instead of something discrete, like a mod name
 CONTINUOUS_COLUMNS = [
@@ -73,46 +81,26 @@ CONTINUOUS_COLUMNS = [
 # price is our column to predict
 LABEL_COLUMN = 'price'
 
-# input_fn takes a pandas dataframe and returns some input columns and an output column
-def input_fn(df):
-    # Creates a dictionary mapping from each continuous feature column name (k) to
-    # the values of that column stored in a constant Tensor.
-    continuous_cols = {k: tf.constant(df[k].values)
-                       for k in CONTINUOUS_COLUMNS}
-
-    # Converts the label column into a constant Tensor.
-    label = tf.constant(df[LABEL_COLUMN].values)
-    # Returns the feature columns and the label.
-    return continuous_cols, label
-
-def train_input_fn():
-    return input_fn(df_train)
-
-def eval_input_fn():
-    return input_fn(df_test)
-
 # set up some tensorflow column names
 level = tf.contrib.layers.real_valued_column('level')
 quality = tf.contrib.layers.real_valued_column('quality')
 
-deep_columns = [level, quality]
+#deep_columns = [level, quality]
+deep_columns = tf.contrib.learn.infer_real_valued_columns_from_input(train_x)
 
 model_dir = tempfile.mkdtemp()
-model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[100, 200, 50])
+model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[10, 5])
 
-model.fit(input_fn=train_input_fn, steps=200)
+model.fit(train_x, train_y, steps=1000, batch_size=32)
 
-results = model.evaluate(input_fn=eval_input_fn, steps=1)
+results = model.evaluate(test_x, test_y, steps=1)
 for key in sorted(results):
     print "%s: %s" % (key, results[key])
 
 # predict the price of a single level 20, 0 quality vaal haste
 df_pred = pd.DataFrame({'level': pd.Series([1, 1, 20, 20]),
-                        'quality': pd.Series([0, 20, 0, 20]),
-                        'price': pd.Series()})
+                        'quality': pd.Series([0, 20, 0, 20])})
 
-def predict_fn():
-    return input_fn(df_pred)
 
-prediction = model.predict(input_fn=predict_fn)
+prediction = model.predict(df_pred.as_matrix())
 print(prediction)

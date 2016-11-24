@@ -1,16 +1,17 @@
 from elasticsearch import Elasticsearch
+import numpy as np
 import pandas as pd
 import tensorflow as tf
-import tensorflow.contrib.layers.python.ops.sparse_feature_cross_op
 from tensorflow.contrib.learn import DNNLinearCombinedRegressor
 import tempfile
 import util
+tf.logging.set_verbosity(tf.logging.INFO)
 
 es = Elasticsearch(hosts=["192.168.1.4:9200"])
 
 # Query elasticsearch for the items to use for the data set
 results = es.search(index="items", body={
-    "size": 10000,
+    "size": 2500,
     "query": {
         "bool": {
             "must": [{
@@ -46,15 +47,6 @@ CATEGORICAL_COLUMNS = [
     'typeLine'
 ]
 
-IMPLICIT_COUNT = 1
-EXPLICIT_COUNT = 8
-for i in range(IMPLICIT_COUNT):
-    CATEGORICAL_COLUMNS.append('implicit_mod%s' % i)
-    CONTINUOUS_COLUMNS.append('implicit_mod%s_value' % i)
-for i in range(EXPLICIT_COUNT):
-    CATEGORICAL_COLUMNS.append('explicit_mod%s' % i)
-    CONTINUOUS_COLUMNS.append('explicit_mod%s_value' % i)
-
 # price is our column to predict
 LABEL_COLUMN = 'price_chaos'
 
@@ -62,19 +54,20 @@ COLUMNS = []
 COLUMNS.extend(CONTINUOUS_COLUMNS)
 COLUMNS.extend(CATEGORICAL_COLUMNS)
 COLUMNS.append(LABEL_COLUMN)
-data = {}
-for c in COLUMNS:
-    data[c] = []
+data = []
+mod_names = {}
 
-items = []
 # Fill out the columns
 for item in results['hits']['hits']:
     # Do basic formatting of the item
     i = util.format_item(item['_source'])
-    if i is not None:
-        items.append(i)
-    else:
+    if i is None:
         continue
+
+    if i['price_chaos'] >= 100 or i['price_chaos'] < 1:
+        continue
+
+    row = {}
 
     util.prop_or_default(i, 'Quality', 0)
     util.prop_or_default(i, 'Physical Damage', 0.0)
@@ -86,44 +79,51 @@ for item in results['hits']['hits']:
     util.req_or_default(i, 'Dex', 0)
     util.req_or_default(i, 'Int', 0)
 
-    for x in range(IMPLICIT_COUNT):
-        if 'implicitMods' in i and len(i['implicitMods']) > x:
-            mod, value = util.format_mod(i['implicitMods'][x])
-            data['implicit_mod%s' % x].append(mod)
-            data['implicit_mod%s_value' % x].append(value)
-        else:
-            data['implicit_mod%s' % x].append("")
-            data['implicit_mod%s_value' % x].append(0.0)
+    if 'implicitMods' in i and len(i['implicitMods']) > 0:
+        for mod in i['implicitMods']:
+            name, value = util.format_mod(mod)
+            row['implicit ' + name] = value
+            mod_names['implicit ' + name] = True
 
-    for x in range(EXPLICIT_COUNT):
-        if 'explicitMods' in i and len(i['explicitMods']) > x:
-            mod, value = util.format_mod(i['explicitMods'][x])
-            data['explicit_mod%s' % x].append(mod)
-            data['explicit_mod%s_value' % x].append(value)
-        else:
-            data['explicit_mod%s' % x].append("")
-            data['explicit_mod%s_value' % x].append(0.0)
+    if 'explicitMods' in i and len(i['explicitMods']) > 0:
+        for mod in i['explicitMods']:
+            name, value = util.format_mod(mod)
+            row[name] = value
+            mod_names[name] = True
 
     # add each column for this item
     for c in COLUMNS:
         if c in i:
-            data[c].append(i[c])
-
-# Replace spaces because wtf tensorflow
-for i in range(len(CONTINUOUS_COLUMNS)):
-    orig = CONTINUOUS_COLUMNS[i]
-    col = orig.replace(" ", "_")
-    CONTINUOUS_COLUMNS[i] = col
-    array = data.pop(orig)
-    data[col] = array
+            row[c] = i[c]
+    data.append(row)
 
 # Format the results into pandas dataframes
 percent_test = 10
-n = (len(items) * percent_test)/100
-df_train = pd.DataFrame({k: pd.Series(data[k][:-n]) for k in data})
-df_test = pd.DataFrame({k: pd.Series(data[k][-n:]) for k in data})
+n = (len(data) * percent_test)/100
+df_train = pd.DataFrame(data[:-n])
+df_test = pd.DataFrame(data[-n:])
 
-print("Got %d Hits:" % len(items))
+# Add mod names to continuous columns
+for mod in mod_names:
+    CONTINUOUS_COLUMNS.append(mod)
+
+# Replace spaces in column names because wtf tensorflow
+for i in range(len(CONTINUOUS_COLUMNS)):
+    orig = CONTINUOUS_COLUMNS[i]
+    col = orig.replace(" ", "_").replace("%", "").replace("+", "").replace("'", "").replace(",", "")
+    CONTINUOUS_COLUMNS[i] = col
+    df_train.rename(columns={orig: col}, inplace=True)
+    df_test.rename(columns={orig: col}, inplace=True)
+    if col not in df_train:
+        df_train[col] = np.nan
+    if col not in df_test:
+        df_test[col] = np.nan
+
+print("Got %d Hits:" % len(data))
+print(len(CONTINUOUS_COLUMNS))
+print(len(df_train.columns))
+print(len(df_test.columns))
+
 #print("Training data:")
 #print(df_train)
 #print("Test data:")
@@ -167,27 +167,15 @@ for col in CATEGORICAL_COLUMNS:
     wide_columns.append(wide_col)
     deep_columns.append(tf.contrib.layers.embedding_column(wide_col, dimension=8))
 
-#print(deep_columns)
-#print(wide_columns)
+print('deep column count: %d' % len(deep_columns))
+print('wide column count: %d' % len(wide_columns))
 
 model_dir = tempfile.mkdtemp()
 model = DNNLinearCombinedRegressor(model_dir=model_dir, linear_feature_columns=wide_columns,
-                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[100, 50])
+                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[80, 60, 40, 20, 10])
 
-model.fit(input_fn=train_input_fn, steps=500)
+model.fit(input_fn=train_input_fn, steps=2000)
 
 results = model.evaluate(input_fn=eval_input_fn, steps=1)
 for key in sorted(results):
     print "%s: %s" % (key, results[key])
-
-# predict the price of a single level 20, 0 quality vaal haste
-'''df_pred = pd.DataFrame({'level': pd.Series([1, 16, 20, 20]),
-                        'quality': pd.Series([0, 15, 0, 20]),
-                        'price': pd.Series()})
-
-def predict_fn():
-    return input_fn(df_pred)
-
-prediction = model.predict(input_fn=predict_fn)
-print(prediction)
-'''

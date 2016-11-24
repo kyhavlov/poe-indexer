@@ -50,12 +50,13 @@ def format_mod(text):
     numbers = re.findall('(\d+\.?\d*)', text)
     if len(numbers) > 2:
         raise Exception("3 numbers in mod!!! " + text)
+    # Give a non-zero value for mods without numbers in them to indicate that the mod is present
     if len(numbers) == 0:
-        return text, 0.0
-    new_text = text.replace(numbers[0], "X")
+        return text, 1.0
+    new_text = text.replace(numbers[0], "X", 1)
     if len(numbers) == 1:
         return new_text, float(numbers[0])
-    new_text = new_text.replace(numbers[1], "Y")
+    new_text = new_text.replace(numbers[1], "Y", 1)
     return new_text, (float(numbers[0]) + float(numbers[1]))/2
 
 
