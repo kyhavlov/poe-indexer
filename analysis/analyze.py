@@ -23,6 +23,9 @@ for col in util.CATEGORICAL_COLUMNS:
 CATEGORICAL_COLUMNS = util.CATEGORICAL_COLUMNS
 LABEL_COLUMN = util.LABEL_COLUMN
 
+df_train.fillna(0.0, inplace=True)
+df_test.fillna(0.0, inplace=True)
+
 
 # input_fn takes a pandas dataframe and returns some input columns and an output column
 def input_fn(df):
@@ -65,15 +68,16 @@ print('wide column count: %d' % len(wide_columns))
 
 model_dir = 'model'
 model = DNNLinearCombinedRegressor(model_dir=model_dir, linear_feature_columns=wide_columns,
-                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[200, 100, 50])
+                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[300, 200, 150, 100, 50],
+                                   dnn_activation_fn=tf.nn.sigmoid, enable_centered_bias=True)
 
-'''model.fit(input_fn=train_input_fn, steps=2000)
+model.fit(input_fn=train_input_fn, steps=500)
 
 results = model.evaluate(input_fn=eval_input_fn, steps=1)
 for key in sorted(results):
-    print "%s: %s" % (key, results[key])'''
+    print "%s: %s" % (key, results[key])
 
-def pred_fn():
+'''def pred_fn():
     return input_fn(df_test[:10])
 
-print(model.predict(input_fn=pred_fn))
+print(model.predict(input_fn=pred_fn))'''

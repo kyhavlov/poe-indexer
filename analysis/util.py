@@ -166,5 +166,7 @@ currency_values = {
     "gcp": 1.3,
     "blessed": 1.0/2.6,
     "bless": 1.0/2.6,
+
+    "5": 0.0
 }
 

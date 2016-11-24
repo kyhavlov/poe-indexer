@@ -36,8 +36,8 @@ for item in query_results:
     if i['price_chaos'] > 50.0:
         continue
 
-    if i['frameType'] == 3:
-        continue
+    #if i['frameType'] == 3:
+    #    continue
 
     row = {}
 
@@ -73,13 +73,13 @@ for item in query_results:
         for mod in i['implicitMods']:
             name, value = util.format_mod(mod)
             row['implicit ' + name] = value
-            mod_names['implicit ' + name] = True
+            mod_names['implicit ' + name] = 1
 
     if 'explicitMods' in i and len(i['explicitMods']) > 0:
         for mod in i['explicitMods']:
             name, value = util.format_mod(mod)
             row[name] = value
-            mod_names[name] = True
+            mod_names[name] = 1
 
     # add each column for this item
     for c in COLUMNS:
@@ -88,7 +88,7 @@ for item in query_results:
     data.append(row)
 
 # Format the results into pandas dataframes
-percent_test = 30
+percent_test = 20
 n = (len(data) * percent_test)/100
 df_train = pd.DataFrame(data[:-n])
 df_test = pd.DataFrame(data[-n:])
