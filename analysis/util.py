@@ -1,4 +1,62 @@
+from elasticsearch import Elasticsearch
 import re
+
+ES_ADDRESS = "192.168.1.4:9200"
+
+# Initialize the columns to use
+# Continuous means the variable is a number instead of something discrete, like a mod name
+CONTINUOUS_COLUMNS = [
+    'ilvl',
+    'corrupted',
+    'frameType',
+    'Quality',
+    'Physical Damage',
+    'Critical Strike Chance',
+    'Attacks per Second',
+    'Level',
+    'Str',
+    'Dex',
+    'Int',
+]
+
+# Categorical columns are for things like typeLine, which will have category values
+# such as 'Skean' or 'Platinum Kris'
+CATEGORICAL_COLUMNS = [
+    'typeLine'
+]
+
+# The label column is what the model is being trained to predict
+LABEL_COLUMN = 'price_chaos'
+
+TRAIN_FILE = 'train.csv'
+TEST_FILE = 'test.csv'
+
+
+def es_bulk_query(body):
+    es = Elasticsearch(hosts=[ES_ADDRESS])
+
+    response = es.search(index='items', doc_type='item', scroll='2m', size=10000, body=body)
+    sid = response['_scroll_id']
+    scroll_size = response['hits']['total']
+
+    items = []
+
+    while scroll_size > 0:
+        scroll_size = len(response['hits']['hits'])
+        items.extend(response['hits']['hits'])
+        print('scroll size: ' + str(scroll_size))
+        response = es.scroll(scroll_id=sid, scroll='2m')
+        sid = response['_scroll_id']
+
+    return items
+
+
+def es_query(body, size=10):
+    es = Elasticsearch(hosts=[ES_ADDRESS])
+
+    response = es.search(index='items', doc_type='item', size=size, body=body)
+
+    return response['hits']['hits']
 
 
 def clean_properties(item, name):
@@ -48,8 +106,8 @@ def req_or_default(item, name, default):
 
 def format_mod(text):
     numbers = re.findall('(\d+\.?\d*)', text)
-    if len(numbers) > 2:
-        raise Exception("3 numbers in mod!!! " + text)
+    #if len(numbers) > 2:
+    #    print("3 numbers in mod!!! " + text)
     # Give a non-zero value for mods without numbers in them to indicate that the mod is present
     if len(numbers) == 0:
         return text, 1.0
@@ -87,19 +145,26 @@ def format_item(item):
 # TODO: scrape and index these currency values every day for more accurate prices
 currency_values = {
     "chaos": 1.0,
+    "chaoss": 1.0,
     "vaal": 1.4,
     "regret": 1.9,
     "exa": 65.0,
+    "exalted": 65.0,
     "chance": 1.0/4.8,
     "divine": 15.4,
     "alt": 1.0/15.0,
+    "alts": 1.0/15.0,
     "alch": 1.0/3.6,
     "chisel": 1.0/2.6,
     "fuse": 1.0/2.2,
+    "fus": 1.0/2.2,
     "jew": 1.0/9.5,
+    "jewellers": 1.0/9.5,
     "scour": 1.2,
     "regal": 1.1,
     "chrom": 1.0/9.2,
     "gcp": 1.3,
+    "blessed": 1.0/2.6,
+    "bless": 1.0/2.6,
 }
 
