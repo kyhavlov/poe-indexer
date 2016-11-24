@@ -1,7 +1,7 @@
 from elasticsearch import Elasticsearch
 import re
 
-ES_ADDRESS = "192.168.1.4:9200"
+ES_ADDRESS = "192.168.1.5:9200"
 
 # Initialize the columns to use
 # Continuous means the variable is a number instead of something discrete, like a mod name
@@ -146,6 +146,7 @@ def format_item(item):
 currency_values = {
     "chaos": 1.0,
     "chaoss": 1.0,
+    "Chaos": 1.0,
     "vaal": 1.4,
     "regret": 1.9,
     "exa": 65.0,
@@ -167,6 +168,7 @@ currency_values = {
     "blessed": 1.0/2.6,
     "bless": 1.0/2.6,
 
-    "5": 0.0
+    "5": 0.0,
+    "mirror": 80*65.0,
 }
 
