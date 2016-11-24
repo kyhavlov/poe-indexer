@@ -1,4 +1,5 @@
 import numpy as np
+import operator
 import pandas as pd
 import util
 
@@ -32,7 +33,10 @@ for item in query_results:
     if i is None:
         continue
 
-    if i['price_chaos'] > 130 or i['price_chaos'] < 0.5:
+    if i['price_chaos'] > 50.0:
+        continue
+
+    if i['frameType'] == 3:
         continue
 
     row = {}
@@ -46,6 +50,24 @@ for item in query_results:
     util.req_or_default(i, 'Str', 0)
     util.req_or_default(i, 'Dex', 0)
     util.req_or_default(i, 'Int', 0)
+
+    if 'sockets' in i:
+        row['socket_count'] = len(i['sockets'])
+        link_counts = {}
+        for socket in i['sockets']:
+            if socket['group'] not in link_counts:
+                link_counts[socket['group']] = 1
+            else:
+                link_counts[socket['group']] += 1
+
+            if 'sockets_'+socket['attr'] not in row:
+                row['sockets_'+socket['attr']] = 1
+            else:
+                row['sockets_'+socket['attr']] += 1
+        if len(link_counts) == 0:
+            row['socket_links'] = 0
+        else:
+            row['socket_links'] = max(link_counts.iteritems(), key=operator.itemgetter(1))[1]
 
     if 'implicitMods' in i and len(i['implicitMods']) > 0:
         for mod in i['implicitMods']:
