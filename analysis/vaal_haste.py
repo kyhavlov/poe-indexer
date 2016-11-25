@@ -1,13 +1,12 @@
 from elasticsearch import Elasticsearch
 import pandas as pd
-from sklearn import metrics
 import tensorflow as tf
 from tensorflow.contrib.learn import DNNRegressor
 import tempfile
 import util
 tf.logging.set_verbosity(tf.logging.INFO)
 
-es = Elasticsearch(hosts=["192.168.1.4:9200"])
+es = Elasticsearch(hosts=["192.168.1.5:9200"])
 
 # Query elasticsearch for the items to use for the data set
 results = es.search(index="items", body={
@@ -56,7 +55,7 @@ n = len(price)/6
 df_train = pd.DataFrame({'level': pd.Series(level[n:]),
                          'quality': pd.Series(quality[n:]),
                          'price': pd.Series(price[n:])})
-print(df_train)
+
 train_x = df_train.as_matrix(['level', 'quality'])
 train_y = df_train.as_matrix(['price'])
 
@@ -72,6 +71,9 @@ print(df_train)
 print("Test data:")
 print(df_test)'''
 
+print(df_train)
+print(df_test)
+
 # Continuous means the variable is a number instead of something discrete, like a mod name
 CONTINUOUS_COLUMNS = [
     'level',
@@ -85,11 +87,11 @@ LABEL_COLUMN = 'price'
 level = tf.contrib.layers.real_valued_column('level')
 quality = tf.contrib.layers.real_valued_column('quality')
 
-#deep_columns = [level, quality]
 deep_columns = tf.contrib.learn.infer_real_valued_columns_from_input(train_x)
 
 model_dir = tempfile.mkdtemp()
-model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[10, 5])
+model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[10, 5],
+                     activation_fn=tf.nn.sigmoid)
 
 model.fit(train_x, train_y, steps=1000, batch_size=32)
 

@@ -8,28 +8,19 @@ ES_ADDRESS = "192.168.1.5:9200"
 CONTINUOUS_COLUMNS = [
     'ilvl',
     'corrupted',
-    'frameType',
-    'Quality',
-    'Physical Damage',
-    'Critical Strike Chance',
-    'Attacks per Second',
-    'Level',
-    'Str',
-    'Dex',
-    'Int',
+    'frameType'
 ]
 
-# Categorical columns are for things like typeLine, which will have category values
-# such as 'Skean' or 'Platinum Kris'
+# Categorical columns are for things like itemType, which will have category values
+# such as 'Dagger' or 'One Handed Sword'
 CATEGORICAL_COLUMNS = [
-    'typeLine'
+    'itemType'
 ]
 
 # The label column is what the model is being trained to predict
 LABEL_COLUMN = 'price_chaos'
 
 TRAIN_FILE = 'train.csv'
-TEST_FILE = 'test.csv'
 
 
 def es_bulk_query(body):
@@ -64,29 +55,35 @@ def clean_properties(item, name):
     if name in item:
         for prop in item[name]:
             # flatten values array
-            properties[prop['name']] = [value for sublist in prop['values'] for value in sublist]
-            values = properties[prop['name']]
+            values = [value for sublist in prop['values'] for value in sublist]
 
-            if len(values) == 1:
-                v = values[0]
-                v = v.replace('%', '')
-                v = v.replace('+', '')
-                v = v.replace(' sec', '')
-                v = v.replace(' (Max)', '')
+            if len(values) >= 1:
+                val = 0.0
 
-                if '-' in v:
-                    halves = v.split("-")
-                    v = (float(halves[0]) + float(halves[1]))/2
-                elif '/' in v:
-                    halves = v.split("/")
-                    v = float(halves[0])
-                else:
-                    if '.' in v:
-                        v = float(v)
+                # Add up all the values to get the total for things like 'Elemental Damage' that have multiple entries
+                for v in values:
+                    v = v.replace('%', '')
+                    v = v.replace('+', '')
+                    v = v.replace(' sec', '')
+                    v = v.replace(' (Max)', '')
+
+                    if '-' in v:
+                        halves = v.split("-")
+                        val += (float(halves[0]) + float(halves[1]))/2
+                    elif '/' in v:
+                        # take the first value for things like experience: 23/23923; we only care about current exp
+                        halves = v.split("/")
+                        val += float(halves[0])
                     else:
-                        v = int(v)
+                        if '.' in v:
+                            val += float(v)
+                        else:
+                            val += int(v)
 
-                properties[prop['name']] = v
+                properties[prop['name']] = val
+            elif len(values) == 0:
+                item['itemType'] = prop['name']
+
     return properties
 
 
@@ -127,8 +124,6 @@ def format_item(item):
     if 'corrupted' not in item:
         item['corrupted'] = False
 
-    item['typeLine'] = item['typeLine'].replace('<<set:MS>><<set:M>><<set:S>>', '')
-
     item['properties'] = clean_properties(item, 'properties')
     item['additionalProperties'] = clean_properties(item, 'additionalProperties')
     item['requirements'] = clean_properties(item, 'requirements')
@@ -158,6 +153,7 @@ currency_values = {
     "alch": 1.0/3.6,
     "chisel": 1.0/2.6,
     "fuse": 1.0/2.2,
+    "fusing": 1.0/2.2,
     "fus": 1.0/2.2,
     "jew": 1.0/9.5,
     "jewellers": 1.0/9.5,

@@ -1,4 +1,3 @@
-import numpy as np
 import operator
 import pandas as pd
 import util
@@ -26,6 +25,7 @@ COLUMNS.append(util.LABEL_COLUMN)
 data = []
 mod_names = {}
 
+count = 0
 # Fill out the columns
 for item in query_results:
     # Do basic formatting of the item
@@ -33,23 +33,26 @@ for item in query_results:
     if i is None:
         continue
 
-    if i['price_chaos'] > 50.0:
+    if i['price_chaos'] > 65.0:
         continue
-
-    #if i['frameType'] == 3:
-    #    continue
 
     row = {}
 
-    util.prop_or_default(i, 'Quality', 0)
-    util.prop_or_default(i, 'Physical Damage', 0.0)
-    util.prop_or_default(i, 'Critical Strike Chance', 0.0)
-    util.prop_or_default(i, 'Attacks per Second', 0.0)
+    def add_mod(m, v):
+        row[m] = v
+        row[m + '_present'] = True
+        mod_names[m] = True
+        mod_names[m+'_present'] = True
 
-    util.req_or_default(i, 'Level', 0)
-    util.req_or_default(i, 'Str', 0)
-    util.req_or_default(i, 'Dex', 0)
-    util.req_or_default(i, 'Int', 0)
+    for p in i['properties']:
+        add_mod('prop_'+p, i['properties'][p])
+
+    for p in i['requirements']:
+        # Only take the first 3 chars of req names, because 'Str' and 'Strength' both appear for some reason
+        add_mod('req_'+p[:3], i['requirements'][p])
+
+    for p in i['additionalProperties']:
+        add_mod('add_prop_'+p, i['additionalProperties'][p])
 
     if 'sockets' in i:
         row['socket_count'] = len(i['sockets'])
@@ -72,14 +75,12 @@ for item in query_results:
     if 'implicitMods' in i and len(i['implicitMods']) > 0:
         for mod in i['implicitMods']:
             name, value = util.format_mod(mod)
-            row['implicit ' + name] = value
-            mod_names['implicit ' + name] = 1
+            add_mod('implicit_' + name, value)
 
     if 'explicitMods' in i and len(i['explicitMods']) > 0:
         for mod in i['explicitMods']:
             name, value = util.format_mod(mod)
-            row[name] = value
-            mod_names[name] = 1
+            add_mod('explicit_'+name, value)
 
     # add each column for this item
     for c in COLUMNS:
@@ -87,32 +88,23 @@ for item in query_results:
             row[c] = i[c]
     data.append(row)
 
-# Format the results into pandas dataframes
+    count += 1
+    if count % 1000 == 0:
+        print('processed %d results' % count)
+
+# Format the results into a pandas dataframe
 percent_test = 20
 n = (len(data) * percent_test)/100
-df_train = pd.DataFrame(data[:-n])
-df_test = pd.DataFrame(data[-n:])
-
-# Add mod names to continuous columns
-all_columns = util.CONTINUOUS_COLUMNS
-for mod in mod_names:
-    all_columns.append(mod)
+df = pd.DataFrame(data)
 
 # Replace illegal chars in column names and add missing columns where necessary
-for i in range(len(all_columns)):
-    orig = all_columns[i]
+for i in range(len(df.columns)):
+    orig = df.columns[i]
     col = orig.replace(" ", "_").replace("%", "").replace("+", "").replace("'", "").replace(",", "")
-    df_train.rename(columns={orig: col}, inplace=True)
-    df_test.rename(columns={orig: col}, inplace=True)
-    if col not in df_train:
-        df_train[col] = np.nan
-    if col not in df_test:
-        df_test[col] = np.nan
+    df.rename(columns={orig: col}, inplace=True)
 
 print("Got %d Hits:" % len(data))
-print(len(df_train.columns))
-print(len(df_test.columns))
+print('column count: ', len(df.columns))
 
 print('exporting to csv...')
-df_train.to_csv(util.TRAIN_FILE, index=False, encoding='utf-8')
-df_test.to_csv(util.TEST_FILE, index=False, encoding='utf-8')
+df.to_csv('armor.csv', index=False, encoding='utf-8')

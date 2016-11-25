@@ -1,30 +1,39 @@
-import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.contrib.learn import DNNLinearCombinedRegressor
 import util
 tf.logging.set_verbosity(tf.logging.INFO)
 
-df_train = pd.read_csv(util.TRAIN_FILE, skipinitialspace=True, encoding='utf-8')
-df_test = pd.read_csv(util.TEST_FILE, skipinitialspace=True, encoding='utf-8')
+df_all = pd.read_csv(util.TRAIN_FILE, skipinitialspace=True, encoding='utf-8')
 
-for j in range(10):
+CONTINUOUS_COLUMNS = util.CONTINUOUS_COLUMNS
+CATEGORICAL_COLUMNS = util.CATEGORICAL_COLUMNS
+LABEL_COLUMN = util.LABEL_COLUMN
+
+for col in df_all.columns:
+    if col == LABEL_COLUMN or col in CATEGORICAL_COLUMNS:
+        continue
+
+    if col.endswith('_present'):
+        if col not in CATEGORICAL_COLUMNS:
+            CATEGORICAL_COLUMNS.append(col)
+        df_all[col].fillna('N', inplace=True)
+    else:
+        if col not in CONTINUOUS_COLUMNS:
+            CONTINUOUS_COLUMNS.append(col)
+        df_all[col].fillna(0.0, inplace=True)
+
+percent_test = 20
+n = (df_all.size * percent_test)/100
+df_train = df_all.head(df_all.size - n)
+df_test = df_all.tail(n)
+
+'''for j in range(10):
     print('ITEM %d ==================' % j)
     for i in range(len(df_test.columns)):
         thing = df_test.iloc[j][i]
         if type(thing) == unicode or not np.isnan(thing):
-            print(df_test.columns[i], thing)
-
-all_columns = set(df_train.columns).union(set(df_test.columns))
-CONTINUOUS_COLUMNS = all_columns.copy()
-CONTINUOUS_COLUMNS.remove(util.LABEL_COLUMN)
-for col in util.CATEGORICAL_COLUMNS:
-    CONTINUOUS_COLUMNS.remove(col)
-CATEGORICAL_COLUMNS = util.CATEGORICAL_COLUMNS
-LABEL_COLUMN = util.LABEL_COLUMN
-
-df_train.fillna(0.0, inplace=True)
-df_test.fillna(0.0, inplace=True)
+            print(df_test.columns[i], thing)'''
 
 
 # input_fn takes a pandas dataframe and returns some input columns and an output column
@@ -59,23 +68,28 @@ for col in CONTINUOUS_COLUMNS:
     deep_columns.append(tf.contrib.layers.real_valued_column(col))
 wide_columns = []
 for col in CATEGORICAL_COLUMNS:
-    wide_col = tf.contrib.layers.sparse_column_with_hash_bucket(col, hash_bucket_size=1000)
-    wide_columns.append(wide_col)
-    deep_columns.append(tf.contrib.layers.embedding_column(wide_col, dimension=10))
+    if col.endswith('_present'):
+        wide_col = tf.contrib.layers.sparse_column_with_hash_bucket(col, hash_bucket_size=4)
+        wide_columns.append(wide_col)
+        deep_columns.append(tf.contrib.layers.embedding_column(wide_col, dimension=2))
+    else:
+        wide_col = tf.contrib.layers.sparse_column_with_hash_bucket(col, hash_bucket_size=4)
+        wide_columns.append(wide_col)
+        deep_columns.append(tf.contrib.layers.embedding_column(wide_col, dimension=16))
 
 print('deep column count: %d' % len(deep_columns))
 print('wide column count: %d' % len(wide_columns))
 
 model_dir = 'model'
 model = DNNLinearCombinedRegressor(model_dir=model_dir, linear_feature_columns=wide_columns,
-                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[300, 200, 150, 100, 50],
+                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[400, 300, 200, 100, 50],
                                    dnn_activation_fn=tf.nn.sigmoid, enable_centered_bias=True)
 
-model.fit(input_fn=train_input_fn, steps=500)
+model.fit(input_fn=train_input_fn, steps=600)
 
 results = model.evaluate(input_fn=eval_input_fn, steps=1)
-for key in sorted(results):
-    print "%s: %s" % (key, results[key])
+#for key in sorted(results):
+#    print "%s: %s" % (key, results[key])
 
 '''def pred_fn():
     return input_fn(df_test[:10])
