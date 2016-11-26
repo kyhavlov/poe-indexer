@@ -1,4 +1,5 @@
 from elasticsearch import Elasticsearch
+import operator
 import re
 
 ES_ADDRESS = "192.168.1.5:9200"
@@ -12,16 +13,24 @@ CONTINUOUS_COLUMNS = [
     'itemType'
 ]
 
-# Categorical columns are for things like itemType, which will have category values
-# such as 'Dagger' or 'One Handed Sword'
-CATEGORICAL_COLUMNS = [
-
-]
-
 # The label column is what the model is being trained to predict
 LABEL_COLUMN = 'price_chaos'
 
+ALL_COLUMNS = []
+ALL_COLUMNS.extend(CONTINUOUS_COLUMNS)
+ALL_COLUMNS.append(LABEL_COLUMN)
+
 TRAIN_FILE = 'train.csv'
+
+HIDDEN_UNITS = [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+
+# buckets for prices to be separated into
+bins = [0, 2.5, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]
+
+def price_bucket(x):
+    for i in range(len(bins)):
+        if i == len(bins)-1 or x < bins[i+1]:
+            return i
 
 
 def es_bulk_query(body):
@@ -51,18 +60,23 @@ def es_query(body, size=10):
     return response['hits']['hits']
 
 
+# Convert the properties from an array of objects to a map of name -> value
 def clean_properties(item, name):
     properties = {}
     if name in item:
         for prop in item[name]:
             # flatten values array
-            values = [value for sublist in prop['values'] for value in sublist]
+            values = []
+            for sublist in values:
+                if len(sublist) > 0:
+                    values.append(sublist[0])
 
             if len(values) >= 1:
                 val = 0.0
 
                 # Add up all the values to get the total for things like 'Elemental Damage' that have multiple entries
                 for v in values:
+                    print(v)
                     v = v.replace('%', '')
                     v = v.replace('+', '')
                     v = v.replace(' sec', '')
@@ -114,12 +128,12 @@ def format_mod(text):
     return new_text, (float(numbers[0]) + float(numbers[1]))/2
 
 
+def format_column_name(col):
+    return col.replace(" ", "_").replace("%", "").replace("+", "").replace("'", "").replace(",", "").replace("\n", "_")
+
+
 # Formats items to make them easier to process
 def format_item(item):
-    # Ignore this item if it only moved tabs and wasn't sold, or if the buyout's too low
-    if item['removed'] - item['last_updated'] <= 10:
-        return None
-
     if 'corrupted' not in item:
         item['corrupted'] = False
 
@@ -131,15 +145,75 @@ def format_item(item):
         item['typeLine'] = item['typeLine'][9:]
     item['itemType'] = item_types[item['typeLine']]
 
-    m = re.search('\S+ (\d+\.?\d*) (\w+)', item['price'])
-    if m is None:
-        return None
-    if m.group(2) not in currency_values:
-        print('currency "%s" not found' % m.group(2))
-        return None
-    item['price_chaos'] = float(m.group(1)) * currency_values[m.group(2)]
+    if 'price' in item:
+        m = re.search('\S+ (\d+\.?\d*) (\w+)', item['price'])
+        if m is None:
+            item['price_chaos'] = -1.0
+        elif m.group(2) not in currency_values:
+            print('currency "%s" not found' % m.group(2))
+            item['price_chaos'] = -1.0
+        else:
+            item['price_chaos'] = float(m.group(1)) * currency_values[m.group(2)]
 
     return item
+
+
+# Returns a table row containing the item's relevant attributes
+def item_to_row(i):
+    row = {}
+
+    def add_mod(m, v):
+        row[m] = v
+
+    for p in i['properties']:
+        add_mod('prop_'+p, i['properties'][p])
+
+    for p in i['requirements']:
+        # Only take the first 3 chars of req names, because 'Str' and 'Strength' both appear for some reason
+        add_mod('req_'+p[:3], i['requirements'][p])
+
+    for p in i['additionalProperties']:
+        add_mod('add_prop_'+p, i['additionalProperties'][p])
+
+    if 'sockets' in i:
+        row['socket_count'] = len(i['sockets'])
+        link_counts = {}
+        for socket in i['sockets']:
+            if socket['group'] not in link_counts:
+                link_counts[socket['group']] = 1
+            else:
+                link_counts[socket['group']] += 1
+
+            if 'sockets_'+socket['attr'] not in row:
+                row['sockets_'+socket['attr']] = 1
+            else:
+                row['sockets_'+socket['attr']] += 1
+        if len(link_counts) == 0:
+            row['socket_links'] = 0
+        else:
+            row['socket_links'] = max(link_counts.iteritems(), key=operator.itemgetter(1))[1]
+
+    if 'implicitMods' in i and len(i['implicitMods']) > 0:
+        for mod in i['implicitMods']:
+            name, value = format_mod(mod)
+            add_mod('implicit_' + name, value)
+
+    if 'explicitMods' in i and len(i['explicitMods']) > 0:
+        for mod in i['explicitMods']:
+            name, value = format_mod(mod)
+            add_mod('explicit_'+name, value)
+
+    if 'craftedMods' in i and len(i['craftedMods']) > 0:
+        for mod in i['craftedMods']:
+            name, value = format_mod(mod)
+            add_mod('crafted_'+name, value)
+
+    # add each column for this item
+    for c in ALL_COLUMNS:
+        if c in i:
+            row[c] = i[c]
+
+    return row
 
 # A mapping of currency types to their value in chaos orbs
 # source: http://poe.ninja/esc/currency
@@ -212,6 +286,11 @@ all_bases = {
     "Belt": ["Chain Belt", "Cloth Belt", "Crystal Belt", "Golden Obi", "Heavy Belt", "Leather Belt", "Rustic Sash", "Studded Belt", "Vanguard Belt"],
     "Staff": ["Coiled Staff", "Crescent Staff", "Eclipse Staff", "Ezomyte Staff", "Foul Staff", "Gnarled Branch", "Highborn Staff", "Imperial Staff", "Iron Staff", "Judgement Staff", "Lathi", "Long Staff", "Maelstr\u00f6m Staff", "Military Staff", "Moon Staff", "Primitive Staff", "Primordial Staff", "Quarterstaff", "Royal Staff", "Serpentine Staff", "Vile Staff", "Woodful Staff"]
 }
+
+type_hash = {}
+sorted_types = sorted(all_bases.keys())
+for key in sorted_types:
+    type_hash[key] = sorted_types.index(key)
 
 item_types = {}
 for base in all_bases:

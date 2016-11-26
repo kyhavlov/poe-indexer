@@ -38,14 +38,14 @@ for item in results['hits']['hits']:
     else:
         continue
 
-    if i['price_chaos'] < 6.0 or i['price_chaos'] > 25.0:
+    if i['price_chaos'] < 6.0 or i['price_chaos'] > 20.0:
         continue
 
     # set up data set
     util.prop_or_default(i, 'Level', 0)
-    level.append(i['Level'])
+    level.append(i['Level']*i['Level'])
     util.prop_or_default(i, 'Quality', 0)
-    quality.append(i['Quality'])
+    quality.append(i['Quality']*i['Quality'])
 
     price.append(i['price_chaos'])
 
@@ -93,7 +93,7 @@ model_dir = tempfile.mkdtemp()
 model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[10, 5],
                      activation_fn=tf.nn.sigmoid)
 
-model.fit(train_x, train_y, steps=1000, batch_size=32)
+model.fit(train_x, train_y, steps=100, batch_size=190)
 
 results = model.evaluate(test_x, test_y, steps=1)
 for key in sorted(results):
