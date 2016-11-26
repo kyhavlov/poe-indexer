@@ -6,9 +6,16 @@ import util
 query_results = util.es_bulk_query({
     "query": {
         "bool": {
+            "should": [
+                {"match": {"properties.name": "Armour Energy Evasion"}},
+                {"match": {"typeLine": "Ring Amulet Talisman Quiver Belt Sash"}}
+            ],
+            "minimum_should_match": 1,
+            # Don't include magic items, they mess with the typeLine
+            "must_not": {
+                "match": {"frameType": 1}
+            },
             "must": [{
-                "match_phrase": {"properties.name": "Attacks per Second"}
-            }, {
                 "script": {
                     "script": "doc['removed'].value >  doc['last_updated'].value"
                 }
@@ -25,6 +32,8 @@ COLUMNS.append(util.LABEL_COLUMN)
 data = []
 mod_names = {}
 
+types = {}
+
 count = 0
 # Fill out the columns
 for item in query_results:
@@ -38,11 +47,11 @@ for item in query_results:
 
     row = {}
 
+    types[i['itemType']] = True
+
     def add_mod(m, v):
         row[m] = v
-        row[m + '_present'] = True
         mod_names[m] = True
-        mod_names[m+'_present'] = True
 
     for p in i['properties']:
         add_mod('prop_'+p, i['properties'][p])
@@ -92,6 +101,8 @@ for item in query_results:
     if count % 1000 == 0:
         print('processed %d results' % count)
 
+print(types)
+
 # Format the results into a pandas dataframe
 percent_test = 20
 n = (len(data) * percent_test)/100
@@ -100,11 +111,11 @@ df = pd.DataFrame(data)
 # Replace illegal chars in column names and add missing columns where necessary
 for i in range(len(df.columns)):
     orig = df.columns[i]
-    col = orig.replace(" ", "_").replace("%", "").replace("+", "").replace("'", "").replace(",", "")
+    col = orig.replace(" ", "_").replace("%", "").replace("+", "").replace("'", "").replace(",", "").replace("\n", "_")
     df.rename(columns={orig: col}, inplace=True)
 
 print("Got %d Hits:" % len(data))
 print('column count: ', len(df.columns))
 
 print('exporting to csv...')
-df.to_csv('armor.csv', index=False, encoding='utf-8')
+df.to_csv(util.TRAIN_FILE, index=False, encoding='utf-8')

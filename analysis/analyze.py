@@ -1,32 +1,37 @@
 import pandas as pd
 import tensorflow as tf
-from tensorflow.contrib.learn import DNNLinearCombinedRegressor
+from tensorflow.contrib.learn import DNNRegressor
 import util
 tf.logging.set_verbosity(tf.logging.INFO)
 
 df_all = pd.read_csv(util.TRAIN_FILE, skipinitialspace=True, encoding='utf-8')
+df_all.fillna(0.0, inplace=True)
 
-CONTINUOUS_COLUMNS = util.CONTINUOUS_COLUMNS
-CATEGORICAL_COLUMNS = util.CATEGORICAL_COLUMNS
 LABEL_COLUMN = util.LABEL_COLUMN
-
-for col in df_all.columns:
-    if col == LABEL_COLUMN or col in CATEGORICAL_COLUMNS:
-        continue
-
-    if col.endswith('_present'):
-        if col not in CATEGORICAL_COLUMNS:
-            CATEGORICAL_COLUMNS.append(col)
-        df_all[col].fillna('N', inplace=True)
-    else:
-        if col not in CONTINUOUS_COLUMNS:
-            CONTINUOUS_COLUMNS.append(col)
-        df_all[col].fillna(0.0, inplace=True)
 
 percent_test = 20
 n = (df_all.size * percent_test)/100
 df_train = df_all.head(df_all.size - n)
 df_test = df_all.tail(n)
+
+itemtype_hash = {}
+item_type_count = 0
+
+def hash_type(x):
+    global itemtype_hash
+    global item_type_count
+    if x not in itemtype_hash:
+        itemtype_hash[x] = item_type_count
+        item_type_count += 1
+    return itemtype_hash[x]
+
+df_train['itemType'] = (df_train['itemType'].apply(hash_type)).astype(float)
+train_x = df_train.ix[:, df_train.columns != LABEL_COLUMN].as_matrix().astype(float)
+train_y = df_train.as_matrix([LABEL_COLUMN])
+
+df_test['itemType'] = (df_test['itemType'].apply(hash_type)).astype(float)
+test_x = df_test.ix[:, df_test.columns != LABEL_COLUMN].as_matrix().astype(float)
+test_y = df_test.as_matrix([LABEL_COLUMN])
 
 '''for j in range(10):
     print('ITEM %d ==================' % j)
@@ -35,61 +40,15 @@ df_test = df_all.tail(n)
         if type(thing) == unicode or not np.isnan(thing):
             print(df_test.columns[i], thing)'''
 
-
-# input_fn takes a pandas dataframe and returns some input columns and an output column
-def input_fn(df):
-    # Creates a dictionary mapping from each continuous feature column name (k) to
-    # the values of that column stored in a constant Tensor.
-    continuous_cols = {k: tf.constant(df[k].values)
-                       for k in CONTINUOUS_COLUMNS}
-    # Creates a dictionary mapping from each categorical feature column name (k)
-    # to the values of that column stored in a tf.SparseTensor.
-    categorical_cols = {k: tf.SparseTensor(
-        indices=[[i, 0] for i in range(df[k].size)],
-        values=df[k].values,
-        shape=[df[k].size, 1])
-                        for k in CATEGORICAL_COLUMNS}
-    # Merges the two dictionaries into one.
-    feature_cols = dict(continuous_cols.items() + categorical_cols.items())
-    # Converts the label column into a constant Tensor.
-    label = tf.constant(df[LABEL_COLUMN].values)
-    # Returns the feature columns and the label.
-    return feature_cols, label
-
-def train_input_fn():
-    return input_fn(df_train)
-
-def eval_input_fn():
-    return input_fn(df_test)
-
-# set up tensorflow column names
-deep_columns = []
-for col in CONTINUOUS_COLUMNS:
-    deep_columns.append(tf.contrib.layers.real_valued_column(col))
-wide_columns = []
-for col in CATEGORICAL_COLUMNS:
-    if col.endswith('_present'):
-        wide_col = tf.contrib.layers.sparse_column_with_hash_bucket(col, hash_bucket_size=4)
-        wide_columns.append(wide_col)
-        deep_columns.append(tf.contrib.layers.embedding_column(wide_col, dimension=2))
-    else:
-        wide_col = tf.contrib.layers.sparse_column_with_hash_bucket(col, hash_bucket_size=4)
-        wide_columns.append(wide_col)
-        deep_columns.append(tf.contrib.layers.embedding_column(wide_col, dimension=16))
-
-print('deep column count: %d' % len(deep_columns))
-print('wide column count: %d' % len(wide_columns))
+deep_columns = tf.contrib.learn.infer_real_valued_columns_from_input(train_x)
 
 model_dir = 'model'
-model = DNNLinearCombinedRegressor(model_dir=model_dir, linear_feature_columns=wide_columns,
-                                   dnn_feature_columns=deep_columns, dnn_hidden_units=[400, 300, 200, 100, 50],
-                                   dnn_activation_fn=tf.nn.sigmoid, enable_centered_bias=True)
+model = DNNRegressor(model_dir=model_dir, feature_columns=deep_columns, hidden_units=[400, 300, 200, 100, 50],
+                     activation_fn=tf.nn.sigmoid, enable_centered_bias=True)
 
-model.fit(input_fn=train_input_fn, steps=600)
-
-results = model.evaluate(input_fn=eval_input_fn, steps=1)
-#for key in sorted(results):
-#    print "%s: %s" % (key, results[key])
+for i in range(50):
+    model.fit(train_x, train_y, steps=1000, batch_size=1000)
+    results = model.evaluate(test_x, test_y, steps=1, batch_size=df_test.size)
 
 '''def pred_fn():
     return input_fn(df_test[:10])
