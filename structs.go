@@ -51,6 +51,7 @@ type Item struct {
 	NextLevelRequirements []*Property `json:"nextLevelRequirements,omitempty"`
 	ImplicitMods          []string    `json:"implicitMods,omitempty"`
 	ExplicitMods          []string    `json:"explicitMods,omitempty"`
+	CraftedMods           []string    `json:"craftedMods,omitempty"`
 }
 
 type Socket struct {
