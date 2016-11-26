@@ -10,6 +10,7 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 df_all = pd.read_csv(util.TRAIN_FILE, skipinitialspace=True, nrows=0, encoding='utf-8')
 df_all = df_all.ix[:, df_all.columns != util.LABEL_COLUMN]
+df_all['itemType'] = (df_all['itemType'].apply(lambda x: util.type_hash[x])).astype(float)
 
 HOST_NAME = '127.0.0.1'
 PORT_NUMBER = 8080
@@ -47,16 +48,17 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
             row['itemType'] = util.type_hash[row['itemType']]
             df = df.append(row, ignore_index=True)
 
-        print(df.columns, df_all.columns)
+        df.fillna(0.0, inplace=True)
         inputs = df.as_matrix().astype(float)
-        predictions = model.predict(inputs, batch_size=len(parsed_json), as_iterable=True)
-        for p in predictions:
-            print(p)
+        predictions = model.predict(inputs, batch_size=len(df))
+        p = []
+        for pred in predictions:
+            p.append(util.get_bin_label(pred))
 
         self.send_response(200)
         self.send_header("Content-type", "application/json")
         self.end_headers()
-        self.wfile.write('{"price":3}')
+        self.wfile.write(json.dumps(p))
 
 if __name__ == '__main__':
     server_class = BaseHTTPServer.HTTPServer

@@ -3,7 +3,7 @@ import pandas as pd
 import util
 
 # Query elasticsearch for the items to use for the data set
-query_results = util.es_bulk_query({
+'''query_results = util.es_bulk_query({
     "query": {
         "bool": {
             "should": [
@@ -24,6 +24,25 @@ query_results = util.es_bulk_query({
             }]
         }
     }
+})'''
+query_results = util.es_bulk_query({
+    "query": {
+        "bool": {
+            # Don't include magic items, they mess with the typeLine
+            "must_not": [
+                {"match": {"frameType": 1}},
+                # skip uniques for now too
+                #{"match": {"frameType": 3}}
+            ],
+            "must": [{
+                "match_phrase": {"properties.name": "Attacks per Second"}
+            }, {
+                "script": {
+                    "script": "doc['removed'].value >  doc['last_updated'].value"
+                }
+            }]
+        }
+    }
 })
 
 data = []
@@ -37,7 +56,7 @@ for item in query_results:
 
     # Do basic formatting of the item
     i = util.format_item(item['_source'])
-    if i['price_chaos'] > 65.0 or i['price_chaos'] < 0.0:
+    if i['price_chaos'] > 195.0 or i['price_chaos'] < 0.0:
         continue
 
     data.append(util.item_to_row(i))
