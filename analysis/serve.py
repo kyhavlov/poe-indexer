@@ -3,10 +3,9 @@ import time
 import BaseHTTPServer
 import pandas as pd
 import tensorflow as tf
-import numpy as np
 from tensorflow.contrib.learn import DNNClassifier
 import util
-tf.logging.set_verbosity(tf.logging.INFO)
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 df_all = pd.read_csv(util.TRAIN_FILE, skipinitialspace=True, nrows=0, encoding='utf-8')
 df_all = df_all.ix[:, df_all.columns != util.LABEL_COLUMN]
@@ -39,26 +38,35 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
         df = df_all.copy()
 
         for item in parsed_json:
-            row = util.item_to_row(util.format_item(item))
+            print(item)
+            util.format_item(item)
+            print(item)
+            row = util.item_to_row(item)
             for col in row:
                 val = row.pop(col)
                 row[util.format_column_name(col)] = val
             if util.LABEL_COLUMN in row:
                 row.pop(util.LABEL_COLUMN)
             row['itemType'] = util.type_hash[row['itemType']]
+            print(row)
             df = df.append(row, ignore_index=True)
 
         df.fillna(0.0, inplace=True)
         inputs = df.as_matrix().astype(float)
-        predictions = model.predict(inputs, batch_size=len(df))
-        p = []
-        for pred in predictions:
-            p.append(util.get_bin_label(pred))
+        predictions = model.predict_proba(inputs, batch_size=len(df))
+        price_map = []
+        for i in predictions:
+            # take the top 5 most likely price ranges
+            top_largest = i.argsort()[-5:][::-1]
+            prices = {'estimate': util.get_price_estimate(i)}
+            for p in top_largest:
+                prices[util.get_bin_label(p)] = float(round(100*i[p], 2))
+            price_map.append(prices)
 
         self.send_response(200)
         self.send_header("Content-type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(p))
+        self.wfile.write(json.dumps(price_map))
 
 if __name__ == '__main__':
     server_class = BaseHTTPServer.HTTPServer

@@ -37,5 +37,18 @@ for i in range(1):
     results = model.evaluate(test_x, test_y, steps=1, batch_size=df_test.size)
 
 # Print some predictions from the test data
-predictions = df_test.sample(100)
-print(model.predict(predictions.ix[:, df_test.columns != LABEL_COLUMN].as_matrix().astype(float), batch_size=100))
+predictions = df_test.sample(10)
+v = model.predict_proba(predictions.ix[:, df_test.columns != LABEL_COLUMN].as_matrix().astype(float), batch_size=10)
+
+price_map = []
+
+for i in v:
+    # take the top 5 most likely price ranges
+    top_largest = i.argsort()[-5:][::-1]
+    prices = {}
+    for p in top_largest:
+        prices[util.get_bin_label(p)] = float(round(100*i[p], 1))
+    price_map.append(prices)
+
+for r in price_map:
+    print r

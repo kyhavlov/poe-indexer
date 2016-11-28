@@ -32,11 +32,32 @@ def price_bucket(x):
         if i == len(bins)-1 or x < bins[i+1]:
             return i
 
+def price_to_onehot(x):
+    arr = [0] * len(bins)
+    arr[price_bucket(x)] = 1.0
+    return arr
+
+def get_price_estimate(price_weights):
+    price = 0.0
+    for i in range(len(price_weights)):
+        avg = bins[i]
+        if i < len(bins)-1:
+            avg += bins[i+1]
+            avg = avg/2.0
+        if price_weights[i] > 0.01:
+            price += avg * price_weights[i]
+    return round(price, 1)
 
 def get_bin_label(x):
+    price = bins[x]
+    price_denom = 1.0
+    currency = 'chaos'
+    if price >= currency_values['exa']:
+        price_denom = currency_values['exa']
+        currency = 'exa'
     if x == len(bins)-1:
-        return '>= %d chaos' % bins[x]
-    return '%0.1f - %0.1f chaos' % (bins[x], bins[x+1])
+        return '>= %d %s' % (price/price_denom, currency)
+    return '%0.1f-%0.1f %s' % (price/price_denom, bins[x+1]/price_denom, currency)
 
 
 def es_bulk_query(body):
@@ -73,7 +94,7 @@ def clean_properties(item, name):
         for prop in item[name]:
             # flatten values array
             values = []
-            for sublist in values:
+            for sublist in prop['values']:
                 if len(sublist) > 0:
                     values.append(sublist[0])
 
@@ -82,7 +103,6 @@ def clean_properties(item, name):
 
                 # Add up all the values to get the total for things like 'Elemental Damage' that have multiple entries
                 for v in values:
-                    print(v)
                     v = v.replace('%', '')
                     v = v.replace('+', '')
                     v = v.replace(' sec', '')

@@ -9,8 +9,8 @@ import (
 const elasticsearchUrl = "192.168.1.4:9200"
 
 func main() {
-	/*rebuildStashIndex()
-	return*/
+	chatbot()
+	return
 
 	indexer, err := NewIndexer()
 	if err != nil {
