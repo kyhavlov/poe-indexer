@@ -22,6 +22,7 @@ ALL_COLUMNS.append(LABEL_COLUMN)
 
 TRAIN_FILE = 'train.csv'
 
+#HIDDEN_UNITS = [800, 600, 500, 400, 300, 200, 150]
 HIDDEN_UNITS = [400, 300, 200, 100, 50]
 
 # buckets for prices to be separated into
@@ -119,7 +120,10 @@ def clean_properties(item, name):
                         if '.' in v:
                             val += float(v)
                         else:
-                            val += int(v)
+                            try:
+                                val += int(v)
+                            except ValueError:
+                                continue
 
                 properties[prop['name']] = val
 
@@ -251,6 +255,9 @@ currency_values = {
     "chaosGG": 1.0,
     "choas": 1.0,
     "chaos3": 1.0,
+    "CHAOS": 1.0,
+    "chas": 1.0,
+    "chaos_CRAB3": 1.0, # yes this is a real one
     "vaal": 1.4,
     "regret": 1.9,
     "exa": 65.0,
@@ -260,8 +267,10 @@ currency_values = {
     "alt": 1.0/15.0,
     "alts": 1.0/15.0,
     "altQ": 1.0/15.0,
+    "alteration": 1.0/15.0,
     "alch": 1.0/3.6,
     "Alch": 1.0/3.6,
+    "alchemy": 1.0/3.6,
     "chisel": 1.0/2.6,
     "fuse": 1.0/2.2,
     "fusing": 1.0/2.2,

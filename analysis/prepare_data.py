@@ -28,15 +28,18 @@ import util
 query_results = util.es_bulk_query({
     "query": {
         "bool": {
+            "should": [
+            # Get all armor, weapons, jewelry, jewels
+                #{"match": {"properties.name": "Armour Energy Evasion"}},
+                #{"match": {"typeLine": "Ring Amulet Talisman Quiver Belt Sash"}},
+                {"match_phrase": {"properties.name": "Attacks per Second"}}
+            ],
+            "minimum_should_match": 1,
             # Don't include magic items, they mess with the typeLine
             "must_not": [
                 {"match": {"frameType": 1}},
-                # skip uniques for now too
-                #{"match": {"frameType": 3}}
             ],
             "must": [{
-                "match_phrase": {"properties.name": "Attacks per Second"}
-            }, {
                 "script": {
                     "script": "doc['removed'].value >  doc['last_updated'].value"
                 }
@@ -46,6 +49,7 @@ query_results = util.es_bulk_query({
 })
 
 data = []
+columns = set()
 
 count = 0
 # Fill out the columns
@@ -59,25 +63,30 @@ for item in query_results:
     if i['price_chaos'] > 195.0 or i['price_chaos'] < 0.0:
         continue
 
-    data.append(util.item_to_row(i))
+    row = util.item_to_row(i)
+    for col in row:
+        columns.add(col)
+    data.append(row)
 
     count += 1
     if count % 1000 == 0:
         print('processed %d results' % count)
 
+print('column count: ', len(columns))
+
 # Format the results into a pandas dataframe
 percent_test = 20
 n = (len(data) * percent_test)/100
-df = pd.DataFrame(data)
+df = pd.DataFrame(data, columns=columns)
 
-# Replace illegal chars in column names and add missing columns where necessary
+# Replace illegal chars in column name
+print("formatting column names...")
 for i in range(len(df.columns)):
     orig = df.columns[i]
     col = util.format_column_name(orig)
     df.rename(columns={orig: col}, inplace=True)
 
 print("Got %d Hits:" % len(data))
-print('column count: ', len(df.columns))
 
 print('exporting to csv...')
 # Shuffle the data to avoid organization during the ES query

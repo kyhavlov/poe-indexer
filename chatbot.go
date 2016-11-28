@@ -134,9 +134,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	sort.Sort(prices)
 
-	outputFormat := `Price Suggestions  [Weighted Average: %0.2f chaos]
+	outputFormat := `Price Suggestions
+Weighted Average: %0.2f chaos
 Confidence | Price Interval
---------------------------------------
+--------------------------------
 `
 	priceOutput := fmt.Sprintf(outputFormat, priceMap[0]["estimate"])
 	for _, p := range prices {
