@@ -24,7 +24,7 @@ func chatbot() {
 	// Create a new Discord session using the provided bot token.
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
-		log.Println("DISCORD_TOKEN var not found, chatbot disabled")
+		log.Println("DISCORD_TOKEN var not found, chatbot shutting down")
 		return
 	}
 	dg, err := discordgo.New("Bot " + token)

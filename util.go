@@ -11,10 +11,10 @@ import (
 )
 
 // Rebuilds the local mapping of stash IDs to item IDs from the index in elasticsearch
-func rebuildStashIndex() {
+func (i *Indexer) rebuildStashIndex() {
 	client := new(http.Client)
 
-	scrollUrl := elasticsearchUrl + "/items/item/_search?pretty=1&scroll=10m"
+	scrollUrl := i.esUrl + "/items/item/_search?pretty=1&scroll=10m"
 
 	// Query for all the items that haven't been removed yet
 	scrollRequest := `{
@@ -38,10 +38,8 @@ func rebuildStashIndex() {
 		panic(err)
 	}
 
-	queryUrl := elasticsearchUrl + "/_search/scroll?pretty"
+	queryUrl := i.esUrl + "/_search/scroll?pretty"
 	queryBody := fmt.Sprintf(`{"scroll":"10m","scroll_id":"%s"}`, scrollResp.ScrollID)
-
-	i, _ := NewIndexer()
 
 	for {
 		if len(scrollResp.Hits.Hits) == 0 {
@@ -55,7 +53,7 @@ func rebuildStashIndex() {
 			i.stashItems[hit.Source.StashID][hit.Source.ID] = true
 		}
 
-		log.Println("Parsed 10000 items")
+		log.Printf("Parsed %d items", len(scrollResp.Hits.Hits))
 
 		err := doRequest(client, "POST", queryUrl, bytes.NewBufferString(queryBody), &scrollResp)
 		if err != nil {

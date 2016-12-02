@@ -15,6 +15,12 @@ df_all['price_chaos'] = (df_all['price_chaos'].apply(util.price_bucket)).astype(
 df_all['itemType'] = (df_all['itemType'].apply(lambda x: util.type_hash[x])).astype(float)
 
 LABEL_COLUMN = util.LABEL_COLUMN
+'''sel = df_all.loc[df_all['socket_links'] == 6].loc[df_all['corrupted'] == False].loc[df_all['frameType'] == 2]
+print(len(sel))
+sel.to_csv('selected.csv', encoding='utf-8')
+
+import sys
+sys.exit(0)'''
 
 # Split the data 80/20 training/test
 percent_test = 20

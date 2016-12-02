@@ -10,8 +10,9 @@ tf.logging.set_verbosity(tf.logging.ERROR)
 df_all = pd.read_csv(util.TRAIN_FILE, skipinitialspace=True, nrows=0, encoding='utf-8')
 df_all = df_all.ix[:, df_all.columns != util.LABEL_COLUMN]
 df_all['itemType'] = (df_all['itemType'].apply(lambda x: util.type_hash[x])).astype(float)
+column_set = set(df_all.columns)
 
-HOST_NAME = '127.0.0.1'
+HOST_NAME = '0.0.0.0'
 PORT_NUMBER = 8080
 
 train_x = df_all.as_matrix().astype(float)
@@ -36,6 +37,7 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
         parsed_json = json.loads(raw_json)
 
         df = df_all.copy()
+        ignored = []
 
         for item in parsed_json:
             print(item)
@@ -49,9 +51,16 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
                 row.pop(util.LABEL_COLUMN)
             row['itemType'] = util.type_hash[row['itemType']]
             print(row)
+            for col in row:
+                if col not in column_set:
+                    ignored.append(col)
+            for col in ignored:
+                row.pop(col)
+            print(row)
             df = df.append(row, ignore_index=True)
 
         df.fillna(0.0, inplace=True)
+        print('Ignored mods: ', ignored)
         inputs = df.as_matrix().astype(float)
         predictions = model.predict_proba(inputs, batch_size=len(df))
         price_map = []

@@ -17,6 +17,7 @@ const stashIndexFile = "stash_index.dat"
 const latestIdFile = "latest_id"
 
 type Indexer struct {
+	esUrl      string
 	currentID  string
 	stashItems map[string]map[string]bool
 	filterFunc func(*Item) bool
@@ -34,25 +35,37 @@ type itemBatch struct {
 	apiID     string
 }
 
-func NewIndexer() (*Indexer, error) {
+func NewIndexer(esUrl string) (*Indexer, error) {
+	log.Printf("Using elasticsearch at %q", esUrl)
 	i := &Indexer{
-		filterFunc: EssenceFilter,
-		itemCh:     make(chan *itemBatch, 4),
-		parseCh:    make(chan struct{}, 0),
-		indexCh:    make(chan struct{}, 0),
-		doneCh:     make(chan struct{}, 0),
-		resetCh:    make(chan string, 4),
+		esUrl:   esUrl,
+		itemCh:  make(chan *itemBatch, 4),
+		parseCh: make(chan struct{}, 0),
+		indexCh: make(chan struct{}, 0),
+		doneCh:  make(chan struct{}, 0),
+		resetCh: make(chan string, 4),
 	}
 
+	// Load stash index, to keep an in memory map of stash ids > item ids for easy removals
 	file, err := os.Open(stashIndexFile)
 	if err != nil {
 		log.Printf("Error: %v", err)
-		log.Println("Initializing empty stash index...")
+		log.Println("Rebuilding stash index...")
 		i.stashItems = make(map[string]map[string]bool)
+		i.rebuildStashIndex()
 	} else {
 		decoder := gob.NewDecoder(file)
-		decoder.Decode(&i.stashItems)
+		err := decoder.Decode(&i.stashItems)
+		if err != nil {
+			return nil, fmt.Errorf("Error decoding stashItems map")
+		}
 	}
+	log.Printf("Loaded %d stash tabs", len(i.stashItems))
+	itemCount := 0
+	for _, items := range i.stashItems {
+		itemCount += len(items)
+	}
+	log.Printf("Loaded %d total items", itemCount)
 
 	bytes, err := ioutil.ReadFile(latestIdFile)
 	if err != nil {
@@ -106,6 +119,7 @@ func (i *Indexer) queryLoop() {
 		response, err := client.Do(req)
 		if err != nil {
 			log.Printf("Error getting request: %v", err)
+			time.Sleep(10 * time.Second)
 			continue
 		}
 		defer response.Body.Close()
@@ -113,6 +127,7 @@ func (i *Indexer) queryLoop() {
 		bytes, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			log.Printf("Error reading response body: %v", err)
+			time.Sleep(10 * time.Second)
 			continue
 		}
 
@@ -121,6 +136,7 @@ func (i *Indexer) queryLoop() {
 		if err != nil {
 			log.Printf("Error parsing json: %v", err)
 			log.Printf("len: %v", len(bytes))
+			time.Sleep(10 * time.Second)
 			continue
 		}
 		stashes.ID = i.currentID
@@ -131,14 +147,14 @@ func (i *Indexer) queryLoop() {
 			log.Printf("Parsed stash page: %q", stashes.ID)
 		} else {
 			log.Println("Reached the end of the stream, waiting 1s for updates...")
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 
 		// Sleep so we don't request too frequently (more than once per second)
 		end := time.Now()
 		diff := end.Sub(start)
-		if diff < time.Second {
-			time.Sleep(time.Second - diff)
+		if diff < (2 * time.Second) {
+			time.Sleep((2 * time.Second) - diff)
 		}
 
 		i.currentID = stashes.NextChangeID
@@ -259,7 +275,7 @@ func (i *Indexer) indexBatch(batch *itemBatch) error {
 		body.WriteString(fmt.Sprintf(`{"doc_as_upsert":true,"doc":{"removed":%d}}`+"\n", removeDate))
 	}
 
-	req, err := http.NewRequest("POST", "http://"+elasticsearchUrl+"/items/item/_bulk", body)
+	req, err := http.NewRequest("POST", "http://"+i.esUrl+"/items/item/_bulk", body)
 	if err != nil {
 		return err
 	}
@@ -299,13 +315,5 @@ func (i *Indexer) persistStashIndex() error {
 // persistLatestID persists a given stash tab api page id to our elasticsearch meta document
 func (i *Indexer) persistLatestID(id string) error {
 	body := fmt.Sprintf(`{"latest_id":"%s"}`, id)
-	return doRequest(&http.Client{}, "PUT", elasticsearchUrl+"/meta/info/1", bytes.NewBufferString(body), nil)
-}
-
-// EssenceFilter is a basic item filter for grabbing items in Essence with a price
-func EssenceFilter(item *Item) bool {
-	if item.Price != "" && item.League == "Essence" {
-		return true
-	}
-	return false
+	return doRequest(&http.Client{}, "PUT", i.esUrl+"/meta/info/1", bytes.NewBufferString(body), nil)
 }
