@@ -109,40 +109,17 @@ func (i *Indexer) queryLoop() {
 		default:
 		}
 
-		req, err := http.NewRequest("GET", "http://api.pathofexile.com/public-stash-tabs?id="+i.currentID, nil)
-		if err != nil {
-			log.Printf("Error creating request: %v", err)
-			continue
-		}
-
 		start := time.Now()
-		response, err := client.Do(req)
+		stashes, err := getNextUpdate(i.currentID, client)
 		if err != nil {
-			log.Printf("Error getting request: %v", err)
-			time.Sleep(10 * time.Second)
-			continue
-		}
-		defer response.Body.Close()
-
-		bytes, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			log.Printf("Error reading response body: %v", err)
-			time.Sleep(10 * time.Second)
-			continue
-		}
-
-		var stashes StashTabResponse
-		err = json.Unmarshal(bytes, &stashes)
-		if err != nil {
-			log.Printf("Error parsing json: %v", err)
-			log.Printf("len: %v", len(bytes))
+			log.Printf("Error getting next stash update: %s", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		stashes.ID = i.currentID
 
 		if stashes.NextChangeID != i.currentID {
-			totalParsed += i.ingestResponse(&stashes)
+			totalParsed += i.ingestResponse(stashes)
 			log.Printf("Total parsed: %d", totalParsed)
 			log.Printf("Parsed stash page: %q", stashes.ID)
 		} else {
@@ -159,6 +136,37 @@ func (i *Indexer) queryLoop() {
 
 		i.currentID = stashes.NextChangeID
 	}
+}
+
+func getNextUpdate(currentID string, client *http.Client) (*StashTabResponse, error) {
+	req, err := http.NewRequest("GET", "http://api.pathofexile.com/public-stash-tabs?id="+currentID, nil)
+	if err != nil {
+		log.Printf("Error creating request: %v", err)
+		return nil, err
+	}
+
+	response, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error getting request: %v", err)
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	bytes, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Printf("Error reading response body: %v", err)
+		return nil, err
+	}
+
+	var stashes StashTabResponse
+	err = json.Unmarshal(bytes, &stashes)
+	if err != nil {
+		log.Printf("Error parsing json: %v", err)
+		log.Printf("len: %v", len(bytes))
+		return nil, err
+	}
+
+	return &stashes, err
 }
 
 // ingestResponse takes a stash tab api response, compares it to our local mapping
