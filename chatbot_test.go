@@ -241,3 +241,53 @@ Corrupted`
 		t.Fatalf("bad: \n%v\n%v", item, expected)
 	}
 }
+
+func TestParseItem_Note(t *testing.T) {
+	raw := `Rarity: Rare
+Brood Harness
+Chain Belt
+--------
+Requirements:
+Level: 52
+--------
+Item Level: 74
+--------
++14 to maximum Energy Shield
+--------
+34% increased Elemental Damage with Weapons
++39 to Strength
++28 to maximum Energy Shield
++31% to Cold Resistance
+13% increased Flask Mana Recovery rate
+--------
+Note: ~price 3 chaos`
+
+	expected := &Item{
+		Ilvl:       74,
+		FrameType:  rarities["Rare"],
+		TypeLine:   "Chain Belt",
+		Properties: []Property{},
+		Requirements: []Property{
+			makeProperty("Level", "52"),
+		},
+		ImplicitMods: []string{
+			"+14 to maximum Energy Shield",
+		},
+		ExplicitMods: []string{
+			"34% increased Elemental Damage with Weapons",
+			"+39 to Strength",
+			"+28 to maximum Energy Shield",
+			"+31% to Cold Resistance",
+			"13% increased Flask Mana Recovery rate",
+		},
+	}
+
+	item, err := parseClipboardItem(raw)
+	if err != nil {
+		t.Fatalf("bad: %v", err)
+	}
+
+	if !reflect.DeepEqual(item, expected) {
+		t.Fatalf("bad: \n%v\n%v", item, expected)
+	}
+}

@@ -236,8 +236,12 @@ func parseClipboardItem(raw string) (*Item, error) {
 	}
 	sort.Sort(item.Properties)
 
-	// Now we work backward from the end, to prune corruption/flavor text
-	// Check for corruption (it appears in the very last section, by itself)
+	// Now we work backward from the end, to prune corruption/flavor text/note
+	if strings.HasPrefix(strings.TrimSpace(sections[len(sections)-1]), "Note: ") {
+		sections = sections[:len(sections)-1]
+	}
+
+	// Check for corruption (it appears in the last section, by itself)
 	if strings.TrimSpace(sections[len(sections)-1]) == "Corrupted" {
 		item.Corrupted = true
 		sections = sections[:len(sections)-1]
