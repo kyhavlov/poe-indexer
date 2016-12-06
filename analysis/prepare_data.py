@@ -15,11 +15,11 @@ import util
             "must_not": [
                 {"match": {"frameType": 1}},
                 # skip uniques for now too
-                {"match": {"frameType": 3}}
+                #{"match": {"frameType": 3}}
             ],
             "must": [{
                 "script": {
-                    "script": "doc['removed'].value >  doc['last_updated'].value"
+                    "script": "doc['removed'].value >  doc['last_updated'].value && doc['removed'].value > 1480915463"
                 }
             }]
         }
@@ -66,6 +66,7 @@ for item in query_results:
     row = util.item_to_row(i)
     for col in row:
         columns.add(col)
+
     data.append(row)
 
     count += 1
@@ -78,13 +79,6 @@ print('column count: ', len(columns))
 percent_test = 20
 n = (len(data) * percent_test)/100
 df = pd.DataFrame(data, columns=columns)
-
-# Replace illegal chars in column name
-print("formatting column names...")
-for i in range(len(df.columns)):
-    orig = df.columns[i]
-    col = util.format_column_name(orig)
-    df.rename(columns={orig: col}, inplace=True)
 
 print("Got %d Hits:" % len(data))
 

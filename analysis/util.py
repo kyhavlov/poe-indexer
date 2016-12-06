@@ -275,10 +275,13 @@ currency_values = {
     "CHAOS": VALUE_CHAOS,
     "chas": VALUE_CHAOS,
     "chaos_CRAB3": VALUE_CHAOS, # yes this is a real one
+    "chaos1": VALUE_CHAOS,
+    "c": VALUE_CHAOS,
     "vaal": VALUE_VAAL,
     "regret": VALUE_REGRET,
     "exa": VALUE_EXALTED,
     "exalted": VALUE_EXALTED,
+    "ex": VALUE_EXALTED,
     "chance": VALUE_CHANCE,
     "divine": VALUE_DIVINE,
     "alt": VALUE_ALTERATION,
@@ -287,6 +290,7 @@ currency_values = {
     "alteration": VALUE_ALTERATION,
     "alch": VALUE_ALCHEMY,
     "Alch": VALUE_ALCHEMY,
+    "alch2": VALUE_ALCHEMY,
     "alchemy": VALUE_ALCHEMY,
     "chisel": VALUE_CHISEL,
     "fuse": VALUE_FUSING,
@@ -307,6 +311,8 @@ currency_values = {
 }
 
 # item base types, source: poe.trade
+weapons = set(["One Hand Axe", "One Hand Sword", "Claw", "One Hand Mace", "Two Hand Mace", "Sceptre", "Two Hand Axe",
+    "Two Hand Sword", "Bow", "Dagger", "Wand", "Staff"])
 all_bases = {
     "Helmet": ["Aventail Helmet", "Barbute Helmet", "Battered Helm", "Bone Circlet", "Bone Helmet", "Callous Mask", "Close Helmet", "Cone Helmet", "Crusader Helmet", "Deicide Mask", "Eternal Burgonet", "Ezomyte Burgonet", "Fencer Helm", "Festival Mask", "Fluted Bascinet", "Gilded Sallet", "Gladiator Helmet", "Golden Mask", "Golden Wreath", "Great Crown", "Great Helmet", "Harlequin Mask", "Hubris Circlet", "Hunter Hood", "Iron Circlet", "Iron Hat", "Iron Mask", "Lacquered Helmet", "Leather Cap", "Leather Hood", "Lion Pelt", "Lunaris Circlet", "Magistrate Crown", "Mind Cage", "Necromancer Circlet", "Nightmare Bascinet", "Noble Tricorne", "Pig-Faced Bascinet", "Plague Mask", "Praetor Crown", "Prophet Crown", "Raven Mask", "Reaver Helmet", "Regicide Mask", "Royal Burgonet", "Rusted Coif", "Sallet", "Samite Helmet", "Scare Mask", "Secutor Helm", "Siege Helmet", "Silken Hood", "Sinner Tricorne", "Solaris Circlet", "Soldier Helmet", "Steel Circlet", "Torture Cage", "Tribal Circlet", "Tricorne", "Ursine Pelt", "Vaal Mask", "Vine Circlet", "Visored Sallet", "Wolf Pelt", "Zealot Helmet"],
     "One Hand Axe": ["Arming Axe", "Boarding Axe", "Broad Axe", "Butcher Axe", "Ceremonial Axe", "Chest Splitter", "Cleaver", "Decorative Axe", "Engraved Hatchet", "Etched Hatchet", "Infernal Axe", "Jade Hatchet", "Jasper Axe", "Karui Axe", "Reaver Axe", "Royal Axe", "Runic Hatchet", "Rusted Hatchet", "Siege Axe", "Spectral Axe", "Tomahawk", "Vaal Hatchet", "War Axe", "Wraith Axe", "Wrist Chopper"],
