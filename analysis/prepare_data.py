@@ -41,7 +41,7 @@ query_results = util.es_bulk_query({
             ],
             "must": [{
                 "script": {
-                    "script": "doc['removed'].value >  doc['last_updated'].value"
+                    "script": "doc['removed'].value >  doc['last_updated'].value && doc['removed'].value > 1480915463"
                 }
             }]
         }

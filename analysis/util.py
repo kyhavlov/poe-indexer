@@ -2,7 +2,7 @@ from elasticsearch import Elasticsearch
 import operator
 import re
 
-ES_ADDRESS = "192.168.1.5:9200"
+ES_ADDRESS = "127.0.0.1:9200"
 
 # Initialize the columns to use
 # Continuous means the variable is a number instead of something discrete, like a mod name
@@ -26,7 +26,14 @@ TRAIN_FILE = 'train.csv'
 HIDDEN_UNITS = [400, 300, 200, 100, 50]
 
 # buckets for prices to be separated into
-bins = [0, 2.5, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 97.5, 130, 162.5, 195]
+VALUE_EXALTED = 55.0
+bins = [0, 2.5, 5, 10, 15, 20, 25, 30, 40,
+    1.0 * VALUE_EXALTED,
+    1.5 * VALUE_EXALTED,
+    2.0 * VALUE_EXALTED,
+    2.5 * VALUE_EXALTED,
+    3.0 * VALUE_EXALTED
+]
 
 def price_bucket(x):
     for i in range(len(bins)):
@@ -248,45 +255,55 @@ def item_to_row(i):
 # A mapping of currency types to their value in chaos orbs
 # source: http://poe.ninja/esc/currency
 # TODO: scrape and index these currency values every day for more accurate prices
+VALUE_CHAOS = 1.0
+VALUE_VAAL = 1.0
+VALUE_REGRET = 1.0
+VALUE_CHANCE = 1.0/8.0
+VALUE_DIVINE = 6.0
+VALUE_ALTERATION = 1.0/21.0
+VALUE_ALCHEMY = 1.0/4.6
+VALUE_CHISEL = 1.0/6.0
+VALUE_FUSING = 1.0/2.9
+VALUE_JEWELLER = 1.0/12.0
 currency_values = {
-    "chaos": 1.0,
-    "chaoss": 1.0,
-    "Chaos": 1.0,
-    "chaosGG": 1.0,
-    "choas": 1.0,
-    "chaos3": 1.0,
-    "CHAOS": 1.0,
-    "chas": 1.0,
-    "chaos_CRAB3": 1.0, # yes this is a real one
-    "vaal": 1.4,
-    "regret": 1.9,
-    "exa": 65.0,
-    "exalted": 65.0,
-    "chance": 1.0/4.8,
-    "divine": 15.4,
-    "alt": 1.0/15.0,
-    "alts": 1.0/15.0,
-    "altQ": 1.0/15.0,
-    "alteration": 1.0/15.0,
-    "alch": 1.0/3.6,
-    "Alch": 1.0/3.6,
-    "alchemy": 1.0/3.6,
-    "chisel": 1.0/2.6,
-    "fuse": 1.0/2.2,
-    "fusing": 1.0/2.2,
-    "fus": 1.0/2.2,
-    "jew": 1.0/9.5,
-    "jewellers": 1.0/9.5,
-    "scour": 1.2,
-    "regal": 1.1,
-    "chrom": 1.0/9.2,
-    "gcp": 1.3,
-    "Pris": 1.3,
-    "blessed": 1.0/2.6,
-    "bless": 1.0/2.6,
+    "chaos": VALUE_CHAOS,
+    "chaoss": VALUE_CHAOS,
+    "Chaos": VALUE_CHAOS,
+    "chaosGG": VALUE_CHAOS,
+    "choas": VALUE_CHAOS,
+    "chaos3": VALUE_CHAOS,
+    "CHAOS": VALUE_CHAOS,
+    "chas": VALUE_CHAOS,
+    "chaos_CRAB3": VALUE_CHAOS, # yes this is a real one
+    "vaal": VALUE_VAAL,
+    "regret": VALUE_REGRET,
+    "exa": VALUE_EXALTED,
+    "exalted": VALUE_EXALTED,
+    "chance": VALUE_CHANCE,
+    "divine": VALUE_DIVINE,
+    "alt": VALUE_ALTERATION,
+    "alts": VALUE_ALTERATION,
+    "altQ": VALUE_ALTERATION,
+    "alteration": VALUE_ALTERATION,
+    "alch": VALUE_ALCHEMY,
+    "Alch": VALUE_ALCHEMY,
+    "alchemy": VALUE_ALCHEMY,
+    "chisel": VALUE_CHISEL,
+    "fuse": VALUE_FUSING,
+    "fusing": VALUE_FUSING,
+    "fus": VALUE_FUSING,
+    "jew": VALUE_JEWELLER,
+    "jewellers": VALUE_JEWELLER,
+    "scour": 1.0/2.0,
+    "regal": 2.0,
+    "chrom": 1.0/12.0,
+    "gcp": 1.0,
+    "Pris": 1.0,
+    "blessed": 1.0/1.5,
+    "bless": 1.0/1.5,
 
     "5": 9999.0,
-    "mirror": 80*65.0,
+    "mirror": 80*VALUE_EXALTED,
 }
 
 # item base types, source: poe.trade
@@ -318,7 +335,7 @@ all_bases = {
     "Essence": ["Essence of Anger", "Essence of Anguish", "Essence of Contempt", "Essence of Delirium", "Essence of Doubt", "Essence of Dread", "Essence of Envy", "Essence of Fear", "Essence of Greed", "Essence of Hatred", "Essence of Horror", "Essence of Hysteria", "Essence of Insanity", "Essence of Loathing", "Essence of Misery", "Essence of Rage", "Essence of Scorn", "Essence of Sorrow", "Essence of Spite", "Essence of Suffering", "Essence of Torment", "Essence of Woe", "Essence of Wrath", "Essence of Zeal", "Remnant of Corruption"],
     "Boots": ["Ambush Boots", "Ancient Greaves", "Antique Greaves", "Arcanist Slippers", "Assassin's Boots", "Bronzescale Boots", "Carnal Boots", "Chain Boots", "Clasped Boots", "Conjurer Boots", "Crusader Boots", "Deerskin Boots", "Dragonscale Boots", "Eelskin Boots", "Goathide Boots", "Golden Caligae", "Goliath Greaves", "Hydrascale Boots", "Iron Greaves", "Ironscale Boots", "Leatherscale Boots", "Legion Boots", "Mesh Boots", "Murder Boots", "Nubuck Boots", "Plated Greaves", "Rawhide Boots", "Reinforced Greaves", "Ringmail Boots", "Riveted Boots", "Samite Slippers", "Satin Slippers", "Scholar Boots", "Serpentscale Boots", "Shackled Boots", "Shagreen Boots", "Sharkskin Boots", "Silk Slippers", "Slink Boots", "Soldier Boots", "Sorcerer Boots", "Stealth Boots", "Steel Greaves", "Steelscale Boots", "Strapped Boots", "Titan Greaves", "Trapper Boots", "Two-Toned Boots", "Vaal Greaves", "Velvet Slippers", "Wool Shoes", "Wrapped Boots", "Wyrmscale Boots", "Zealot Boots"],
     "Currency": ["Albino Rhoa Feather", "Apprentice Cartographer's Seal", "Apprentice Cartographer's Sextant", "Armourer's Scrap", "Blacksmith's Whetstone", "Blessed Orb", "Cartographer's Chisel", "Chaos Orb", "Chromatic Orb", "Divine Orb", "Eternal Orb", "Exalted Orb", "Gemcutter's Prism", "Glassblower's Bauble", "Jeweller's Orb", "Journeyman Cartographer's Seal", "Journeyman Cartographer's Sextant", "Master Cartographer's Seal", "Master Cartographer's Sextant", "Mirror of Kalandra", "Orb of Alchemy", "Orb of Alteration", "Orb of Augmentation", "Orb of Chance", "Orb of Fusing", "Orb of Regret", "Orb of Scouring", "Orb of Transmutation", "Perandus Coin", "Portal Scroll", "Regal Orb", "Scroll of Wisdom", "Silver Coin", "Unshaping Orb", "Vaal Orb"],
-    "Ring": ["Amethyst Ring", "Coral Ring", "Diamond Ring", "Gold Ring", "Golden Hoop", "Iron Ring", "Moonstone Ring", "Opal Ring", "Paua Ring", "Prismatic Ring", "Ruby Ring", "Sapphire Ring", "Steel Ring", "Topaz Ring", "Two-Stone Ring", "Unset Ring"],
+    "Ring": ["Amethyst Ring", "Breach Ring", "Coral Ring", "Diamond Ring", "Gold Ring", "Golden Hoop", "Iron Ring", "Moonstone Ring", "Opal Ring", "Paua Ring", "Prismatic Ring", "Ruby Ring", "Sapphire Ring", "Steel Ring", "Topaz Ring", "Two-Stone Ring", "Unset Ring"],
     "Belt": ["Chain Belt", "Cloth Belt", "Crystal Belt", "Golden Obi", "Heavy Belt", "Leather Belt", "Rustic Sash", "Studded Belt", "Vanguard Belt"],
     "Staff": ["Coiled Staff", "Crescent Staff", "Eclipse Staff", "Ezomyte Staff", "Foul Staff", "Gnarled Branch", "Highborn Staff", "Imperial Staff", "Iron Staff", "Judgement Staff", "Lathi", "Long Staff", u"Maelstr\xf6m Staff", "Military Staff", "Moon Staff", "Primitive Staff", "Primordial Staff", "Quarterstaff", "Royal Staff", "Serpentine Staff", "Vile Staff", "Woodful Staff"]
 }
