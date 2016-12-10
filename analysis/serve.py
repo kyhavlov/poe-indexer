@@ -8,27 +8,24 @@ import util
 tf.logging.set_verbosity(tf.logging.ERROR)
 
 column_set = {}
-model = {}
+models = {}
+dataframes = {}
 
-df_weapons = pd.read_csv("weapons.csv", skipinitialspace=True, nrows=0, encoding='utf-8')
-df_weapons = df_weapons.ix[:, df_weapons.columns != util.LABEL_COLUMN]
-df_weapons['itemType'] = (df_weapons['itemType'].apply(lambda x: util.type_hash[x])).astype(float)
-column_set['weapons'] = set(df_weapons.columns)
-weapons_x = df_weapons.as_matrix().astype(float)
-deep_columns_weapons = tf.contrib.learn.infer_real_valued_columns_from_input(weapons_x)
+for item_type in util.all_bases:
+    csv_filename = filename = "data/" + item_type.lower().replace(" ", "_") + ".csv"
+    model_dir = "models/" + item_type.lower().replace(" ", "_")
+    df = pd.read_csv(csv_filename, skipinitialspace=True, nrows=0, encoding='utf-8')
+    df = df.ix[:, df.columns != util.LABEL_COLUMN]
+    df['itemType'] = (df['itemType'].apply(lambda x: util.type_hash[x])).astype(float)
+    dataframes[item_type] = df
+    column_set[item_type] = set(df.columns)
+    columns = df.as_matrix().astype(float)
+    deep_columns = tf.contrib.learn.infer_real_valued_columns_from_input(columns)
+    hidden_units = util.get_hidden_units(len(df.columns))
 
-model['weapons'] = DNNClassifier(model_dir='model_weapons', feature_columns=deep_columns_weapons, hidden_units=util.HIDDEN_UNITS,
-                      n_classes=len(util.bins), enable_centered_bias=True)
+    models[item_type] = DNNClassifier(model_dir=model_dir, feature_columns=deep_columns, hidden_units=hidden_units,
+                          n_classes=len(util.bins), enable_centered_bias=True)
 
-df_armor = pd.read_csv("armor.csv", skipinitialspace=True, nrows=0, encoding='utf-8')
-df_armor = df_armor.ix[:, df_armor.columns != util.LABEL_COLUMN]
-df_armor['itemType'] = (df_armor['itemType'].apply(lambda x: util.type_hash[x])).astype(float)
-column_set['armor'] = set(df_armor.columns)
-armor_x = df_armor.as_matrix().astype(float)
-deep_columns_armor = tf.contrib.learn.infer_real_valued_columns_from_input(armor_x)
-
-model['armor'] = DNNClassifier(model_dir='model_armor', feature_columns=deep_columns_armor, hidden_units=util.HIDDEN_UNITS,
-                      n_classes=len(util.bins), enable_centered_bias=True)
 
 HOST_NAME = '127.0.0.1'
 PORT_NUMBER = 8080
@@ -46,17 +43,12 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
         raw_json = self.rfile.read(int(self.headers.getheader('content-length')))
         parsed_json = json.loads(raw_json)
         df = {}
-        df["weapons"] = df_weapons.copy()
-        df["armor"] = df_armor.copy()
 
         for item in parsed_json:
             util.format_item(item)
             row = util.item_to_row(item)
 
-            if row['itemType'] in util.weapons:
-                item_class = "weapons"
-            else:
-                item_class = "armor"
+            item_class = row['itemType']
 
             #print(item_class)
             #print(row)
@@ -64,6 +56,8 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
             if util.LABEL_COLUMN in row:
                 row.pop(util.LABEL_COLUMN)
             row['itemType'] = util.type_hash[row['itemType']]
+            row['day'] = util.get_day(int(time.time()))
+            print(row['day'])
 
             ignored = []
             for col in row:
@@ -73,10 +67,11 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
                 row.pop(col)
             #print('Ignored mods: ', ignored)
 
+            if item_class not in df:
+                df[item_class] = dataframes[item_class].copy()
             df[item_class] = df[item_class].append(row, ignore_index=True)
 
-        print(len(df["weapons"]))
-        print(len(df["armor"]))
+        #print(len(df))
 
         self.send_response(200)
         self.send_header("Content-type", "application/json")
@@ -87,7 +82,7 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
             df[frame].fillna(0.0, inplace=True)
 
             inputs = df[frame].as_matrix().astype(float)
-            predictions = model[frame].predict_proba(inputs, batch_size=len(df))
+            predictions = models[frame].predict_proba(inputs, batch_size=len(df[frame]))
             price_map = []
             for i in predictions:
                 # take the top 5 most likely price ranges

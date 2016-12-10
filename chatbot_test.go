@@ -339,3 +339,46 @@ Note: ~price 3 chaos`
 		t.Fatalf("bad: \n%v\n%v", item, expected)
 	}
 }
+
+func TestUniqueJewel(t *testing.T) {
+	raw := `Rarity: Unique
+Fluid Motion
+Viridian Jewel
+--------
+Radius: Large
+--------
+Item Level: 76
+--------
++22 to Dexterity
+Strength from Passives in Radius is Transformed to Dexterity
+--------
+Even the strongest of steel can be made to bend.
+--------
+Place into an allocated Jewel Socket on the Passive Skill Tree. Right click to remove from the Socket.
+--------
+Corrupted`
+
+	expected := &Item{
+		Ilvl:      76,
+		Corrupted: true,
+		FrameType: rarities["Unique"],
+		TypeLine:  "Viridian Jewel",
+		Properties: []Property{
+			makeProperty("Radius", "Large"),
+		},
+		Requirements: []Property{},
+		ExplicitMods: []string{
+			"+22 to Dexterity",
+			"Strength from Passives in Radius is Transformed to Dexterity",
+		},
+	}
+
+	item, err := parseClipboardItem(raw)
+	if err != nil {
+		t.Fatalf("bad: %v", err)
+	}
+
+	if !reflect.DeepEqual(item, expected) {
+		t.Fatalf("bad: \n%v\n%v", item, expected)
+	}
+}

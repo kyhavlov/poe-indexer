@@ -198,11 +198,14 @@ func parseClipboardItem(raw string) (*Item, error) {
 	}
 
 	// Parse req/properties/stats/ilvl
-	property := regexp.MustCompile("(.+): [\\+\\-]?(\\d+\\.?\\d*(?:\\-\\d+\\.?\\d*)?)%?,? ?(\\d+\\.?\\d*(?:\\-\\d+\\.?\\d*)?)?")
+	property := regexp.MustCompile("(.+): [\\+\\-]?(\\w+\\.?\\d*(?:\\-\\d+\\.?\\d*)?)%?,? ?(\\w+\\.?\\d*(?:\\-\\d+\\.?\\d*)?)?")
 	properties := make(map[string][]string)
 
 	propsFound := property.FindAllStringSubmatch(raw, -1)
 	for _, p := range propsFound {
+		if p[1] == "Rarity" || p[1] == "Sockets" {
+			continue
+		}
 		// On properties without multiple number ranges (like elemental damage) skip the last group because it'll be empty
 		if p[len(p)-1] == "" {
 			properties[p[1]] = p[2:3]
@@ -236,6 +239,10 @@ func parseClipboardItem(raw string) (*Item, error) {
 	}
 	sort.Sort(item.Properties)
 
+	if len(sections) <= 1 {
+		return nil, fmt.Errorf("Error: item is not properly formatted")
+	}
+
 	// Now we work backward from the end, to prune corruption/flavor text/note
 	if strings.HasPrefix(strings.TrimSpace(sections[len(sections)-1]), "Note: ") {
 		sections = sections[:len(sections)-1]
@@ -244,6 +251,11 @@ func parseClipboardItem(raw string) (*Item, error) {
 	// Check for corruption (it appears in the last section, by itself)
 	if strings.TrimSpace(sections[len(sections)-1]) == "Corrupted" {
 		item.Corrupted = true
+		sections = sections[:len(sections)-1]
+	}
+
+	// If it's a jewel, trim the help text section off the end
+	if strings.Contains(item.TypeLine, "Jewel") {
 		sections = sections[:len(sections)-1]
 	}
 
@@ -260,7 +272,7 @@ func parseClipboardItem(raw string) (*Item, error) {
 	}
 
 	// If this last section has more than 1 mod, assume it's explicit mods
-	if strings.Count(strings.TrimSpace(sections[len(sections)-1]), "\n") > 1 {
+	if strings.Count(strings.TrimSpace(sections[len(sections)-1]), "\n") >= 1 {
 		item.ExplicitMods = make([]string, 0)
 		lines := strings.Split(strings.TrimSpace(sections[len(sections)-1]), "\n")
 		modsFound := make(map[string]bool)
