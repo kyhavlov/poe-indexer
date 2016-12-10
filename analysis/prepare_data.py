@@ -3,12 +3,13 @@ import pandas as pd
 import util
 
 # Query elasticsearch for the items to use for the data set
-'''query_results = util.es_bulk_query({
+query_results = util.es_query({
     "query": {
         "bool": {
             "should": [
-                {"match": {"properties.name": "Armour Energy Evasion"}},
-                {"match": {"typeLine": "Ring Amulet Talisman Quiver Belt Sash"}}
+                #{"match": {"properties.name": "Armour Energy Evasion"}},
+                #{"match": {"typeLine": "Ring Amulet Talisman Quiver Belt Sash"}}
+                {"match": {"typeLine": "Amulet"}}
             ],
             "minimum_should_match": 1,
             # Don't include magic items, they mess with the typeLine
@@ -24,8 +25,8 @@ import util
             }]
         }
     }
-})'''
-query_results = util.es_bulk_query({
+}, size=10000)
+'''query_results = util.es_bulk_query({
     "query": {
         "bool": {
             "should": [
@@ -46,7 +47,7 @@ query_results = util.es_bulk_query({
             }]
         }
     }
-})
+})'''
 
 data = []
 columns = set()

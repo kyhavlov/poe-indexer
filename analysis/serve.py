@@ -30,7 +30,7 @@ deep_columns_armor = tf.contrib.learn.infer_real_valued_columns_from_input(armor
 model['armor'] = DNNClassifier(model_dir='model_armor', feature_columns=deep_columns_armor, hidden_units=util.HIDDEN_UNITS,
                       n_classes=len(util.bins), enable_centered_bias=True)
 
-HOST_NAME = '0.0.0.0'
+HOST_NAME = '127.0.0.1'
 PORT_NUMBER = 8080
 
 class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -58,8 +58,8 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
             else:
                 item_class = "armor"
 
-            print(item_class)
-            print(row)
+            #print(item_class)
+            #print(row)
 
             if util.LABEL_COLUMN in row:
                 row.pop(util.LABEL_COLUMN)
@@ -71,7 +71,7 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
                     ignored.append(col)
             for col in ignored:
                 row.pop(col)
-            print('Ignored mods: ', ignored)
+            #print('Ignored mods: ', ignored)
 
             df[item_class] = df[item_class].append(row, ignore_index=True)
 

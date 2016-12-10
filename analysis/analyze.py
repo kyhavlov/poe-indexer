@@ -38,8 +38,8 @@ model_dir = 'model'
 model = DNNClassifier(model_dir=model_dir, feature_columns=deep_columns, hidden_units=util.HIDDEN_UNITS,
                       n_classes=len(util.bins), enable_centered_bias=True)
 
-for i in range(1):
-    model.fit(train_x, train_y, steps=1000, batch_size=1000)
+for i in range(2):
+    model.fit(train_x, train_y, steps=500, batch_size=1000)
     results = model.evaluate(test_x, test_y, steps=1, batch_size=df_test.size)
 
 # Print some predictions from the test data

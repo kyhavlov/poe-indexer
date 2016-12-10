@@ -69,9 +69,12 @@ def get_bin_label(x):
 
 
 def es_bulk_query(body):
+    return es_bulk_query_func(body, None)
+
+def es_bulk_query_func(body, func):
     es = Elasticsearch(hosts=[ES_ADDRESS])
 
-    response = es.search(index='items', doc_type='item', scroll='2m', size=10000, body=body)
+    response = es.search(index='items', doc_type='item', scroll='10m', size=10000, body=body)
     sid = response['_scroll_id']
     scroll_size = response['hits']['total']
 
@@ -80,12 +83,13 @@ def es_bulk_query(body):
     while scroll_size > 0:
         scroll_size = len(response['hits']['hits'])
         items.extend(response['hits']['hits'])
+        if func is not None:
+            func(response['hits']['hits'])
         print('scroll size: ' + str(scroll_size))
         response = es.scroll(scroll_id=sid, scroll='2m')
         sid = response['_scroll_id']
 
     return items
-
 
 def es_query(body, size=10):
     es = Elasticsearch(hosts=[ES_ADDRESS])
@@ -183,17 +187,20 @@ def format_item(item):
     item['itemType'] = item_types[item['typeLine']]
 
     if 'price' in item:
-        m = re.search('\S+ (\d+\.?\d*) (\w+)', item['price'])
-        if m is None:
-            item['price_chaos'] = -1.0
-        elif m.group(2) not in currency_values:
-            print('currency "%s" not found' % m.group(2))
-            item['price_chaos'] = -1.0
-        else:
-            item['price_chaos'] = float(m.group(1)) * currency_values[m.group(2)]
+        item['price_chaos'] = format_price(item['price'])
 
     return item
 
+
+def format_price(price):
+    m = re.search('\S+ (\d+\.?\d*) (\w+)', price)
+    if m is None:
+        return -1.0
+    elif m.group(2) not in currency_values:
+        print('currency "%s" not found' % m.group(2))
+        return -1.0
+    else:
+        return float(m.group(1)) * currency_values[m.group(2)]
 
 # Returns a table row containing the item's relevant attributes
 def item_to_row(i):
@@ -282,6 +289,7 @@ currency_values = {
     "exa": VALUE_EXALTED,
     "exalted": VALUE_EXALTED,
     "ex": VALUE_EXALTED,
+    "exalt": VALUE_EXALTED,
     "chance": VALUE_CHANCE,
     "divine": VALUE_DIVINE,
     "alt": VALUE_ALTERATION,
@@ -306,7 +314,7 @@ currency_values = {
     "blessed": 1.0/1.5,
     "bless": 1.0/1.5,
 
-    "5": 9999.0,
+    "5": 0.0,
     "mirror": 80*VALUE_EXALTED,
 }
 

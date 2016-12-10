@@ -242,6 +242,54 @@ Corrupted`
 	}
 }
 
+func TestParseItem_Rare(t *testing.T) {
+	raw := `Rarity: Rare
+Pandemonium Choker
+Gold Amulet
+--------
+Requirements:
+Level: 64
+--------
+Item Level: 81
+--------
+20% increased Rarity of Items found
+--------
+Adds 11 to 21 Physical Damage to Attacks
++40% increased Elemental Damage with Weapons
++252 to Accuracy Rating
++63 to maximum Life
++11% increased Rarity of Items found`
+
+	expected := &Item{
+		Ilvl:       81,
+		FrameType:  rarities["Rare"],
+		TypeLine:   "Gold Amulet",
+		Properties: []Property{},
+		Requirements: []Property{
+			makeProperty("Level", "64"),
+		},
+		ImplicitMods: []string{
+			"20% increased Rarity of Items found",
+		},
+		ExplicitMods: []string{
+			"Adds 11 to 21 Physical Damage to Attacks",
+			"+40% increased Elemental Damage with Weapons",
+			"+252 to Accuracy Rating",
+			"+63 to maximum Life",
+			"+11% increased Rarity of Items found",
+		},
+	}
+
+	item, err := parseClipboardItem(raw)
+	if err != nil {
+		t.Fatalf("bad: %v", err)
+	}
+
+	if !reflect.DeepEqual(item, expected) {
+		t.Fatalf("bad: \n%v\n%v", item, expected)
+	}
+}
+
 func TestParseItem_Note(t *testing.T) {
 	raw := `Rarity: Rare
 Brood Harness
