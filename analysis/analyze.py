@@ -39,10 +39,10 @@ def train_model(item_type):
     model = DNNClassifier(model_dir=model_dir, feature_columns=deep_columns, hidden_units=hidden_units,
                           n_classes=len(util.bins), enable_centered_bias=True)
 
-    steps = len(df_train)/40
+    steps = len(df_train)/75
     sessions = (steps/500)+2
     for i in range(sessions):
-        model.fit(train_x, train_y, steps=500, batch_size=1000)
+        model.fit(train_x, train_y, steps=500, batch_size=5000)
         results = model.evaluate(test_x, test_y, steps=1, batch_size=df_test.size)
 
     # Print some predictions from the test data
