@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -61,7 +62,7 @@ var buyoutFormat = regexp.MustCompile("\\S+ (\\d+(?:\\.\\d+)?) (\\w+)")
 // parseBuyout takes a buyout string, such as "~price 1.2 exa" and returns a buyout
 // converted to chaos orb value.
 func (c *CurrencyTracker) ParseBuyout(raw string) float64 {
-	buyout := buyoutFormat.FindStringSubmatch(raw)
+	buyout := buyoutFormat.FindStringSubmatch(strings.ToLower(raw))
 	if len(buyout) < 3 {
 		return -1.0
 	}
@@ -108,8 +109,10 @@ var aliasMap = map[string]string{
 	"regret":      REGRET,
 	"exa":         EXALTED,
 	"exalted":     EXALTED,
+	"exalteds":    EXALTED,
 	"ex":          EXALTED,
 	"exalt":       EXALTED,
+	"exalts":      EXALTED,
 	"chance":      CHANCE,
 	"divine":      DIVINE,
 	"alt":         ALTERATION,
