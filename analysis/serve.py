@@ -87,10 +87,7 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
             for i in predictions:
                 # take the top 5 most likely price ranges
                 top_largest = i.argsort()[-5:][::-1]
-                top_prices = []
-                for p in top_largest:
-                    top_prices.append(i[p])
-                prices = {'estimate': util.get_price_estimate(top_prices)}
+                prices = {'estimate': util.get_price_estimate(i)}
                 for p in top_largest:
                     prices[util.get_bin_label(p)] = float(round(100*i[p], 2))
                 price_map.append(prices)

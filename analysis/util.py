@@ -67,7 +67,7 @@ def get_price_estimate(price_weights):
         if i < len(bins)-1:
             avg += bins[i+1]
             avg = avg/2.0
-        if price_weights[i] > 0.01:
+        if price_weights[i] >= 0.05:
             price += avg * price_weights[i]
     return round(price, 1)
 

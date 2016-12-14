@@ -19,7 +19,7 @@ def download_data(query_body, filename):
 
         # Do basic formatting of the item
         i = util.format_item(item['_source'])
-        if i['price_chaos'] > 195.0 or i['price_chaos'] < 0.0:
+        if i['price_chaos'] <= 0.0:
             continue
 
         row = util.item_to_row(i)

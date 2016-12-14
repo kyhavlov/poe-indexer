@@ -126,6 +126,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	var priceMap []map[string]float32
 	var prices Prices
 	err = json.Unmarshal(responseBody, &priceMap)
+	if err != nil || len(priceMap) == 0 {
+		log.Printf("Error: no response from price server: %v", err)
+		return
+	}
 
 	for label, weight := range priceMap[0] {
 		if label != "estimate" {
