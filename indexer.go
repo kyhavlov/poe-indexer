@@ -17,11 +17,12 @@ const stashIndexFile = "stash_index.dat"
 const latestIdFile = "latest_id"
 
 type Indexer struct {
-	esUrl      string
-	currentID  string
-	stashItems map[string]map[string]bool
-	filterFunc func(*Item) bool
-	itemCh     chan *itemBatch
+	esUrl           string
+	currentID       string
+	stashItems      map[string]map[string]bool
+	filterFunc      func(*Item) bool
+	itemCh          chan *itemBatch
+	currencyTracker *CurrencyTracker
 
 	parseCh chan struct{}
 	indexCh chan struct{}
@@ -38,13 +39,17 @@ type itemBatch struct {
 func NewIndexer(esUrl string) (*Indexer, error) {
 	log.Printf("Using elasticsearch at %q", esUrl)
 	i := &Indexer{
-		esUrl:   esUrl,
-		itemCh:  make(chan *itemBatch, 4),
-		parseCh: make(chan struct{}, 0),
-		indexCh: make(chan struct{}, 0),
-		doneCh:  make(chan struct{}, 0),
-		resetCh: make(chan string, 4),
+		esUrl:           esUrl,
+		itemCh:          make(chan *itemBatch, 4),
+		currencyTracker: NewCurrencyTracker(),
+		parseCh:         make(chan struct{}, 0),
+		indexCh:         make(chan struct{}, 0),
+		doneCh:          make(chan struct{}, 0),
+		resetCh:         make(chan string, 4),
 	}
+
+	// Begin tracking currency rates
+	go i.currencyTracker.TrackCurrencyValues()
 
 	// Load stash index, to keep an in memory map of stash ids > item ids for easy removals
 	file, err := os.Open(stashIndexFile)
@@ -176,6 +181,9 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 	var selected []*Item
 	deletions := make(map[string]int64)
 
+	i.currencyTracker.RLock()
+	defer i.currencyTracker.RUnlock()
+
 	for _, stash := range tabs.Stashes {
 		tabItems := make(map[string]bool)
 
@@ -184,6 +192,10 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 				item.Price = item.Note
 			} else if strings.HasPrefix(stash.Stash, "~price") || strings.HasPrefix(stash.Stash, "~b") {
 				item.Price = stash.Stash
+			}
+
+			if item.Price != "" {
+				item.PriceChaos = i.currencyTracker.ParseBuyout(item.Price)
 			}
 
 			if i.filterFunc(item) {

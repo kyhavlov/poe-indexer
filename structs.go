@@ -21,12 +21,13 @@ type Stash struct {
 
 type Item struct {
 	// Derived metadata fields
-	Price       string `json:"price,omitempty"`
-	Account     string `json:"account,omitempty"`
-	StashID     string `json:"stashId,omitempty"`
-	Created     int64  `json:"created,omitempty"`
-	LastUpdated int64  `json:"last_updated,omitempty"`
-	Removed     int64  `json:"removed,omitempty"`
+	Price       string  `json:"price,omitempty"`
+	PriceChaos  float64 `json:"price_chaos,omitempty"`
+	Account     string  `json:"account,omitempty"`
+	StashID     string  `json:"stashId,omitempty"`
+	Created     int64   `json:"created,omitempty"`
+	LastUpdated int64   `json:"last_updated,omitempty"`
+	Removed     int64   `json:"removed,omitempty"`
 
 	Verified          bool     `json:"verified,omitempty"`
 	Ilvl              int      `json:"ilvl"`

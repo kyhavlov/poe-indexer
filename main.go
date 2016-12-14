@@ -22,7 +22,7 @@ func main() {
 		panic(err)
 	}
 	indexer.filterFunc = func(item *Item) bool {
-		if item.Price != "" && item.League == league {
+		if item.PriceChaos > 0 && item.League == league {
 			return true
 		}
 		return false
