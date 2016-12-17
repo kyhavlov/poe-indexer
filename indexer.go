@@ -343,8 +343,19 @@ func (i *Indexer) checkDeals(batch *itemBatch) error {
 	}
 
 	body := &bytes.Buffer{}
-	json, _ := json.Marshal(batch.items)
-	body.Write(json)
+	body.WriteString("[")
+	first := true
+	for _, item := range batch.items {
+		json, _ := json.Marshal(item)
+		if item.FrameType == 2 && (strings.HasSuffix(item.TypeLine, " Ring") || strings.HasSuffix(item.TypeLine, " Amulet")) {
+			if !first {
+				body.WriteString(",")
+			}
+			first = false
+			body.Write(json)
+		}
+	}
+	body.WriteString("]")
 
 	req, err := http.NewRequest("POST", "http://localhost:8080/price", body)
 	if err != nil {
