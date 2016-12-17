@@ -199,6 +199,8 @@ def format_item(item):
 
     if item['typeLine'].startswith('Superior '):
         item['typeLine'] = item['typeLine'][9:]
+    if item['typeLine'] not in item_types:
+        return None
     item['itemType'] = item_types[item['typeLine']]
     item['itemSubType'] = get_item_subtype(item['typeLine'])
 

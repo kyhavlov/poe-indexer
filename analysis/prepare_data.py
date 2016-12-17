@@ -19,7 +19,7 @@ def download_data(query_body, filename):
 
         # Do basic formatting of the item
         i = util.format_item(item['_source'])
-        if i['price_chaos'] <= 0.0:
+        if i['price_chaos'] > 2 * util.VALUE_EXALTED or i['price_chaos'] <= 0.0:
             continue
 
         row = util.item_to_row(i)
@@ -59,7 +59,7 @@ base_query = {
             ],
             "must": [
                 {"script": {
-                    "script": "doc['removed'].value >  doc['last_updated'].value && doc['removed'].value > 1480915463"
+                    "script": "doc['removed'].value >  doc['last_updated'].value && doc['removed'].value > 1480995463"
                 }
             }]
         }

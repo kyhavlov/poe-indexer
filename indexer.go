@@ -22,12 +22,12 @@ type Indexer struct {
 	stashItems      map[string]map[string]bool
 	filterFunc      func(*Item) bool
 	itemCh          chan *itemBatch
+	dealCh          chan *itemBatch
 	currencyTracker *CurrencyTracker
 
-	parseCh chan struct{}
-	indexCh chan struct{}
-	doneCh  chan struct{}
-	resetCh chan string
+	shutdownCh chan struct{}
+	doneCh     chan struct{}
+	resetCh    chan string
 }
 
 type itemBatch struct {
@@ -41,9 +41,9 @@ func NewIndexer(esUrl string) (*Indexer, error) {
 	i := &Indexer{
 		esUrl:           esUrl,
 		itemCh:          make(chan *itemBatch, 4),
+		dealCh:          make(chan *itemBatch, 4),
 		currencyTracker: NewCurrencyTracker(),
-		parseCh:         make(chan struct{}, 0),
-		indexCh:         make(chan struct{}, 0),
+		shutdownCh:      make(chan struct{}, 0),
 		doneCh:          make(chan struct{}, 0),
 		resetCh:         make(chan string, 4),
 	}
@@ -86,11 +86,11 @@ func NewIndexer(esUrl string) (*Indexer, error) {
 func (i *Indexer) start() {
 	go i.queryLoop()
 	go i.indexLoop()
+	go i.dealLoop()
 }
 
 func (i *Indexer) shutdown() {
-	i.parseCh <- struct{}{}
-	i.indexCh <- struct{}{}
+	close(i.shutdownCh)
 }
 
 // queryLoop is the loop for querying the stash tab api
@@ -105,7 +105,7 @@ func (i *Indexer) queryLoop() {
 
 	for {
 		select {
-		case <-i.parseCh:
+		case <-i.shutdownCh:
 			log.Println("Parser stopped")
 			return
 		case id := <-i.resetCh:
@@ -237,11 +237,13 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 	}
 
 	// Send the updates to be indexed
-	i.itemCh <- &itemBatch{
+	batch := &itemBatch{
 		items:     selected,
 		deletions: deletions,
 		apiID:     tabs.ID,
 	}
+	i.itemCh <- batch
+	i.dealCh <- batch
 
 	return len(selected)
 }
@@ -251,7 +253,7 @@ func (i *Indexer) indexLoop() {
 	totalIndexed := 0
 	for {
 		select {
-		case <-i.indexCh:
+		case <-i.shutdownCh:
 			log.Println("Indexer stopped")
 			return
 		case batch := <-i.itemCh:
@@ -312,6 +314,54 @@ func (i *Indexer) indexBatch(batch *itemBatch) error {
 		log.Printf("Headers: %v", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
 		log.Println("Response Body:", string(body))
+		return fmt.Errorf("Unexpected status code %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// dealLoop receives itemBatch updates over dealCh and scans them for underpriced items
+func (i *Indexer) dealLoop() {
+	for {
+		select {
+		case <-i.shutdownCh:
+			log.Println("Indexer stopped")
+			return
+		case batch := <-i.dealCh:
+			err := i.checkDeals(batch)
+			if err != nil {
+				log.Printf("Error sending to price server: %v", err)
+			}
+		}
+	}
+}
+
+// checkDeals sends a batch of items to the neural net server for scanning
+func (i *Indexer) checkDeals(batch *itemBatch) error {
+	if len(batch.items) == 0 {
+		return nil
+	}
+
+	body := &bytes.Buffer{}
+	json, _ := json.Marshal(batch.items)
+	body.Write(json)
+
+	req, err := http.NewRequest("POST", "http://localhost:8080/price", body)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Deal-Mode", "On")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		log.Printf("Error from price server: status code %d", resp.StatusCode)
+		log.Printf("Headers: %v", resp.Header)
 		return fmt.Errorf("Unexpected status code %d", resp.StatusCode)
 	}
 
