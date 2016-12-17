@@ -190,19 +190,19 @@ def format_column_name(col):
 
 # Formats items to make them easier to process
 def format_item(item):
-    if 'corrupted' not in item:
-        item['corrupted'] = False
-
-    item['properties'] = clean_properties(item, 'properties')
-    item['additionalProperties'] = clean_properties(item, 'additionalProperties')
-    item['requirements'] = clean_properties(item, 'requirements')
-
     if item['typeLine'].startswith('Superior '):
         item['typeLine'] = item['typeLine'][9:]
     if item['typeLine'] not in item_types:
         return None
     item['itemType'] = item_types[item['typeLine']]
     item['itemSubType'] = get_item_subtype(item['typeLine'])
+
+    if 'corrupted' not in item:
+        item['corrupted'] = False
+
+    item['properties'] = clean_properties(item, 'properties')
+    item['additionalProperties'] = clean_properties(item, 'additionalProperties')
+    item['requirements'] = clean_properties(item, 'requirements')
 
     if 'price' in item and 'price_chaos' not in item:
         item['price_chaos'] = format_price(item['price'])
