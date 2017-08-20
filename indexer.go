@@ -86,7 +86,7 @@ func NewIndexer(esUrl string) (*Indexer, error) {
 func (i *Indexer) start() {
 	go i.queryLoop()
 	go i.indexLoop()
-	go i.dealLoop()
+	//go i.dealLoop()
 }
 
 func (i *Indexer) shutdown() {

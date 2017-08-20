@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const apiUrl = "poe.ninja/api/Data/GetCurrencyOverview?league=Breach"
+const apiUrl = "poe.ninja/api/Data/GetCurrencyOverview?league=Harbinger"
 
 type CurrencyInfo struct {
 	Lines []struct {

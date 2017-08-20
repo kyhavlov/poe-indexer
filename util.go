@@ -35,10 +35,10 @@ func (i *Indexer) rebuildStashIndex() {
 
 	var scrollResp ScrollResponse
 	err := doRequest(client, "POST", scrollUrl, bytes.NewBufferString(scrollRequest), &scrollResp)
-	if strings.Contains(err.Error(), "Unexpected status code 404") {
-		return
-	}
 	if err != nil {
+		if strings.Contains(err.Error(), "Unexpected status code 404") {
+			return
+		}
 		panic(err)
 	}
 
