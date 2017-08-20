@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 )
 
 // Rebuilds the local mapping of stash IDs to item IDs from the index in elasticsearch
@@ -34,6 +35,9 @@ func (i *Indexer) rebuildStashIndex() {
 
 	var scrollResp ScrollResponse
 	err := doRequest(client, "POST", scrollUrl, bytes.NewBufferString(scrollRequest), &scrollResp)
+	if strings.Contains(err.Error(), "Unexpected status code 404") {
+		return
+	}
 	if err != nil {
 		panic(err)
 	}
