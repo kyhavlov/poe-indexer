@@ -38,6 +38,7 @@ def main(unused_argv):
     print(mod_lists['explicit'])
 
     entries = np.zeros([len(items), 18], dtype=float)
+    classes = np.zeros([len(items), 1])
     for i in range(len(items)):
         item = items[i]
         item_entry = [item['ilvl'], 1 if item['corrupted'] else 0]
@@ -68,11 +69,14 @@ def main(unused_argv):
             item_entry.extend([0] * 12)
 
         entries[i] = np.array(item_entry)
+        classes[i] = util.price_bucket(item['price_chaos'])
 
     np.savetxt('amulets.csv', entries, fmt='%.2f')
+    np.savetxt('amulet_classes.csv', classes, fmt='%.2f')
 
     print(items[123])
     print(entries[123])
+    print(classes[123])
 
 
 def get_mods(item):

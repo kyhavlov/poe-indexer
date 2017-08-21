@@ -53,8 +53,8 @@ def get_hidden_units(n):
     return hidden_units
 
 def price_bucket(x):
-    for i in range(len(bins)):
-        if i == len(bins)-1 or x < bins[i+1]:
+    for i in range(len(PRICE_BUCKETS)):
+        if i == len(PRICE_BUCKETS)-1 or x < PRICE_BUCKETS[i+1]:
             return i
 
 def price_to_onehot(x):
