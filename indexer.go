@@ -243,7 +243,7 @@ func (i *Indexer) ingestResponse(tabs *StashTabResponse) int {
 		apiID:     tabs.ID,
 	}
 	i.itemCh <- batch
-	i.dealCh <- batch
+	//i.dealCh <- batch
 
 	return len(selected)
 }

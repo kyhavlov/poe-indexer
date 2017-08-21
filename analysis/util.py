@@ -3,7 +3,7 @@ import operator
 import re
 import time
 
-ES_ADDRESS = "127.0.0.1:9200"
+ES_ADDRESS = "192.168.0.3:9200"
 
 # Initialize the columns to use
 # Continuous means the variable is a number instead of something discrete, like a mod name
@@ -39,7 +39,7 @@ bins = [0, 2.5, 5, 10, 15, 20, 25, 30, 40, 55,
     3.0 * VALUE_EXALTED
 ]
 
-start_time = 1480915460
+start_time = 1503120000
 
 def get_day(seconds):
     return (seconds-start_time)/86400

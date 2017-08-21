@@ -60,7 +60,7 @@ def train_model(item_type):
         price_map.append(prices)
 
     for r in price_map:
-        print r
+        print(r)
 
 for item_type in util.all_bases:
     train_model(item_type)
