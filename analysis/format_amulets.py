@@ -72,7 +72,7 @@ def main(unused_argv):
         classes[i] = util.price_bucket(item['price_chaos'])
 
     np.savetxt('amulets.csv', entries, fmt='%.2f')
-    np.savetxt('amulet_classes.csv', classes)
+    np.savetxt('amulet_classes.csv', classes, fmt='%d')
 
     print(items[123])
     print(entries[123])
