@@ -2,6 +2,9 @@ from elasticsearch import Elasticsearch
 import operator
 import re
 import time
+import numpy as np
+from tensorflow.python.framework import dtypes
+from tensorflow.python.framework import random_seed
 
 ES_ADDRESS = "192.168.0.3:9200"
 
@@ -391,3 +394,96 @@ item_types = {}
 for base in all_bases:
     for t in all_bases[base]:
         item_types[t] = base
+
+
+class DataSet(object):
+    def __init__(self, data, labels, train_split=0.6, dtype=dtypes.float32, seed=None):
+        seed1, seed2 = random_seed.get_seed(seed)
+        # If op level seed is not set, use whatever graph level seed is returned
+        np.random.seed(seed1 if seed is None else seed2)
+
+        dtype = dtypes.as_dtype(dtype).base_dtype
+        if dtype not in (dtypes.uint8, dtypes.float32):
+            raise TypeError('Invalid image dtype %r, expected uint8 or float32' % dtype)
+
+        assert data.shape[0] == labels.shape[0], (
+            'data.shape: %s labels.shape: %s' % (data.shape, labels.shape))
+
+        self._num_examples = data.shape[0]
+
+        self._num_train = int(train_split * self._num_examples)
+        perm0 = np.arange(self._num_examples)
+        np.random.shuffle(perm0)
+
+        self._train_data = data[perm0[:self._num_train]]
+        self._train_labels = labels[perm0[:self._num_train]]
+        self._valid_data = data[perm0[self._num_train:]]
+        self._valid_labels = labels[perm0[self._num_train:]]
+
+        self._epochs_completed = 0
+        self._index_in_epoch = 0
+
+    @property
+    def train_data(self):
+        return self._train_data
+
+    @property
+    def train_labels(self):
+        return self._train_labels
+
+    @property
+    def valid_data(self):
+        return self._valid_data
+
+    @property
+    def valid_labels(self):
+        return self._valid_labels
+
+    @property
+    def num_train(self):
+        return self._num_train
+
+    @property
+    def epochs_completed(self):
+        return self._epochs_completed
+
+    def next_batch(self, batch_size=100, shuffle=True):
+        """Return the next `batch_size` examples from this data set."""
+        start = self._index_in_epoch
+
+        # Shuffle for the first epoch
+        if self._epochs_completed == 0 and start == 0 and shuffle:
+            perm0 = np.arange(self._num_train)
+            np.random.shuffle(perm0)
+            self._train_data = self.train_data[perm0]
+            self._train_labels = self.train_labels[perm0]
+
+        # Go to the next epoch
+        if start + batch_size > self._num_train:
+            # Finished epoch
+            self._epochs_completed += 1
+
+            # Get the rest examples in this epoch
+            rest_num_train = self._num_train - start
+            data_rest_part = self._train_data[start:self._num_train]
+            labels_rest_part = self._train_labels[start:self._num_train]
+
+            # Shuffle the data
+            if shuffle:
+                perm = np.arange(self._num_train)
+                np.random.shuffle(perm)
+                self._train_data = self.train_data[perm]
+                self._train_labels = self.train_labels[perm]
+
+            # Start next epoch
+            start = 0
+            self._index_in_epoch = batch_size - rest_num_train
+            end = self._index_in_epoch
+            data_new_part = self._train_data[start:end]
+            labels_new_part = self._train_labels[start:end]
+            return np.concatenate((data_rest_part, data_new_part), axis=0), np.concatenate(
+                (labels_rest_part, labels_new_part), axis=0)
+        else:
+            self._index_in_epoch += batch_size
+            end = self._index_in_epoch
+            return self._train_data[start:end], self._train_labels[start:end]
