@@ -29,6 +29,8 @@ TRAIN_FILE = 'train.csv'
 #HIDDEN_UNITS = [400, 300, 200, 100, 50]
 HIDDEN_UNITS = [150, 150, 150, 150, 150]
 
+PRICE_BUCKETS = [0, 2.5, 5, 10, 15, 20, 30, 40, 50, 75, 100, 125, 150, 200, 250, 300]
+
 # buckets for prices to be separated into
 VALUE_EXALTED = 70.0
 bins = [0, 2.5, 5, 10, 15, 20, 25, 30, 40, 55,
