@@ -1,3 +1,4 @@
+import csv
 import numpy as np
 import tensorflow as tf
 import json
@@ -36,23 +37,39 @@ def main(unused_argv):
 
     print(mod_lists['explicit'])
 
-    entries = []
-    for item in items:
+    entries = np.zeros([len(items), 18], dtype=float)
+    for i in range(len(items)):
+        item = items[i]
         item_entry = [item['ilvl'], 1 if item['corrupted'] else 0]
         mods = get_mods(item)
 
-        for mod_type in mod_lists:
-            mod_category = mod_type + 'Mods'
-            if mod_category not in item or len(item[mod_category]) == 0:
-                item_entry.extend([0] * (max_mods[mod_type]*2))
-            else:
-                for i in range(int(len(mods[mod_type])/2)):
-                    item_entry.append(mod_lists[mod_type][mods[mod_type][i*2]])
-                    item_entry.append(mods[mod_type][i*2+1])
-                if mod_type == 'explicit' and len(item[mod_category]) < 12:
-                    item_entry.extend([0] * (12 - len(item[mod_category])))
+        if 'implicitMods' in item:
+            mod_type = 'implicit'
+            item_entry.append(mod_lists[mod_type][mods[mod_type][0]])
+            item_entry.append(mods[mod_type][1])
+        else:
+            item_entry.extend([0] * 2)
 
-        entries.append(item_entry)
+        if 'craftedMods' in item:
+            mod_type = 'crafted'
+            item_entry.append(mod_lists[mod_type][mods[mod_type][0]])
+            item_entry.append(mods[mod_type][1])
+        else:
+            item_entry.extend([0] * 2)
+
+        if 'explicitMods' in item:
+            mod_type = 'explicit'
+            for j in range(int(len(mods[mod_type]) / 2)):
+                item_entry.append(mod_lists[mod_type][mods[mod_type][j * 2]])
+                item_entry.append(mods[mod_type][j * 2 + 1])
+            if len(mods[mod_type]) < 12:
+                item_entry.extend([0] * (12 - len(mods[mod_type])))
+        else:
+            item_entry.extend([0] * 12)
+
+        entries[i] = np.array(item_entry)
+
+    np.savetxt('amulets.csv', entries, fmt='%.2f')
 
     print(items[123])
     print(entries[123])
