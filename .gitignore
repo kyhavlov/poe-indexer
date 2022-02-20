@@ -1,8 +1,5 @@
-*.idea
-*.exe
-*.pyc
-*.json
-*.csv
+poe-indexer
+poe-indexer.service
+vars.env
 
-latest_id
-stash_index.dat
+*.json

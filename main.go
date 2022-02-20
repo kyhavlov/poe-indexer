@@ -1,33 +1,40 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
+)
+
+const ESDateFormat = "2006-01-02T15:04:05-0700"
+
+var (
+	priceString = regexp.MustCompile(`~price (?P<Value>[0-9]*[.]?[0-9]+) (?P<Currency>\w+)`)
+	ESURL       = ""
+	DiscordURL  = ""
 )
 
 func main() {
-	go chatbot()
+	ESURL = os.Getenv("ES_URL")
+	DiscordURL = os.Getenv("DISCORD_HOOK")
+	if ESURL == "" {
+		fmt.Println("ES_URL is not set")
+		os.Exit(1)
+	}
 
-	var esUrl string
-	var league string
-	flag.StringVar(&esUrl, "es", "127.0.0.1", "Elasticsearch address")
-	flag.StringVar(&league, "league", "Standard", "League")
-	flag.Parse()
+	fmt.Printf("ES_URL: %s\n", ESURL)
+	fmt.Printf("DISCORD_HOOK: %s\n", DiscordURL)
 
 	// Set up the indexer to track items with a price from our chosen league
-	indexer, err := NewIndexer(esUrl + ":9200")
-	if err != nil {
-		panic(err)
-	}
-	indexer.filterFunc = func(item *Item) bool {
-		if item.PriceChaos > 0 && item.League == league {
-			return true
-		}
-		return false
-	}
-	indexer.start()
+	updateCh := make(chan []PlayerStash, 4)
+	persistCh := make(chan itemUpdate, 4)
+	go diffStashLoop(updateCh, persistCh)
+	go persistItemLoop(persistCh)
+
+	go expensiveSoldItemAlertLoop()
+
+	fetchItems(updateCh)
 
 	// Wait for interrupt signal
 	c := make(chan os.Signal, 1)
@@ -36,10 +43,6 @@ func main() {
 	// Block and shutdown on receiving any signal
 	<-c
 	fmt.Println("Got signal, shutting down")
-	indexer.shutdown()
-
-	// Wait for stash/api id to be persisted to disk/ES
-	<-indexer.doneCh
 
 	os.Exit(1)
 }

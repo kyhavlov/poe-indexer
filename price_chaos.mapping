@@ -1,0 +1,23 @@
+PUT items-archnemesis/_mappings
+{
+  "runtime": {
+    "price_chaos": {
+      "type": "double",
+      "script": """
+        if (doc["price_currency.keyword"].size() == 0 || doc["price_value"].size() == 0) {
+          return;
+        }
+      
+        double baseValue = 1.0;
+        if (doc["price_currency.keyword"].value == "exalted") {
+            baseValue = 127.0;
+        }
+        if (doc["price_currency.keyword"].value == "mirror") {
+            baseValue = 23275.0;
+        }
+
+        emit(baseValue * doc["price_value"].value);
+      """
+    }
+  }
+}
