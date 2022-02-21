@@ -32,7 +32,7 @@ func fetchItems(updateCh chan []PlayerStash) {
 		}
 
 		updateCh <- response.Stashes
-		fmt.Printf("Processing items for change ID %s\n", currentID)
+		//fmt.Printf("Processing items for change ID %s\n", currentID)
 
 		if len(response.Stashes) == 0 {
 			fmt.Println("Reached the end of the stream, waiting for updates...")
@@ -183,7 +183,7 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 			oldStashes[doc.ID][itemID] = true
 		}
 	}
-	fmt.Printf("found %d existing stashes to compare\n", found)
+	fmt.Printf("Found %d existing stashes to compare\n", found)
 
 	// Compare to new stash mappings
 	currentStashes := make(map[string]map[string]bool, 256)

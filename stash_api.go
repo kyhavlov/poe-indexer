@@ -81,6 +81,7 @@ type Extended struct {
 type Socket struct {
 	Group int    `json:"group"`
 	Attr  string `json:"attr"`
+	Color string `json:"sColour"`
 }
 
 type Property struct {

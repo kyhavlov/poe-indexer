@@ -80,6 +80,8 @@ func alertOnExpensiveSoldItems(duplicates map[string]bool, minTime time.Time) ma
 		return newItems
 	}
 
+	fmt.Printf("Sending %d sold items to Discord\n", len(embeds))
+
 	jsonEncoded, _ := json.Marshal(embeds)
 	jsonMsg := fmt.Sprintf(`{"username":"item-knower","avatar_url":"https://cdn.discordapp.com/app-icons/252665923981279232/926103f5ca846a96664478d71a2de821.png","embeds":%s}`, jsonEncoded)
 	if err := doDiscordRequest(bytes.NewBufferString(jsonMsg)); err != nil {
@@ -112,6 +114,7 @@ func makeDiscordEmbed(item Item) DiscordEmbed {
 		embed.Title = item.TypeLine
 		embed.Description = item.Note
 	}
+	embed.Description += fmt.Sprintf("\nilvl: %d", item.Ilvl)
 
 	addStringArrayField := func(name string, array []string) {
 		if len(array) > 0 {
@@ -130,6 +133,12 @@ func makeDiscordEmbed(item Item) DiscordEmbed {
 					Value: prop.Values[0][0],
 				})
 			}
+			if prop.Name == "Quality" {
+				embed.Fields = append(embed.Fields, DiscordEmbedField{
+					Name:  "Gem Quality",
+					Value: prop.Values[0][0],
+				})
+			}
 		}
 	}
 
@@ -139,75 +148,65 @@ func makeDiscordEmbed(item Item) DiscordEmbed {
 	addStringArrayField("Crafted Mods", item.CraftedMods)
 	addStringArrayField("Utility Mods", item.UtilityMods)
 
+	influenceRollup := ""
+	appendMod := func(mod string) {
+		if influenceRollup != "" {
+			influenceRollup += "\n" + strings.Title(mod)
+		}
+	}
+
 	if len(item.Influences) > 0 {
 		for influence := range item.Influences {
-			embed.Fields = append(embed.Fields, DiscordEmbedField{
-				Name:  strings.Title(influence),
-				Value: "\u200b",
-			})
+			appendMod(influence)
 		}
 	}
 
 	if item.Synthesised {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Synthesised",
-			Value: "\u200b",
-		})
+		appendMod("Synthesised")
 	}
 
 	if item.Fractured {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Fractured",
-			Value: "\u200b",
-		})
+		appendMod("Fractured")
 	}
 
 	if item.Duplicated {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Duplicated",
-			Value: "\u200b",
-		})
+		appendMod("Duplicated")
 	}
 
 	if item.Split {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Split",
-			Value: "\u200b",
-		})
+		appendMod("Split")
 	}
 
 	if item.Searing {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Searing",
-			Value: "\u200b",
-		})
+		appendMod("Searing")
 	}
 
 	if item.Tangled {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Tangled",
-			Value: "\u200b",
-		})
+		appendMod("Tangled")
 	}
 
 	if item.Corrupted {
-		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Corrupted",
-			Value: "\u200b",
-		})
+		appendMod("Corrupted")
 	}
 
 	if !item.Identified {
+		appendMod("Unidentified")
+	}
+
+	if influenceRollup != "" {
 		embed.Fields = append(embed.Fields, DiscordEmbedField{
-			Name:  "Unidentified",
+			Name:  influenceRollup,
 			Value: "\u200b",
 		})
 	}
 
 	if len(item.Sockets) > 0 {
+		colorMap := map[string]string{"S": "R", "D": "G", "I": "B", "G": "W", "A": "A"}
 		groupCounts := make(map[int]int)
+		colorCounts := make(map[string]int)
 		for _, socket := range item.Sockets {
 			groupCounts[socket.Group]++
+			colorCounts[colorMap[socket.Attr]]++
 		}
 		maxCount := 0
 		for _, count := range groupCounts {
@@ -220,9 +219,14 @@ func makeDiscordEmbed(item Item) DiscordEmbed {
 			Value:  fmt.Sprintf("%d", maxCount),
 			Inline: true,
 		})
+
+		socketStr := fmt.Sprintf("%d\n", len(item.Sockets))
+		for color, count := range colorCounts {
+			socketStr += strings.Repeat(color, count)
+		}
 		embed.Fields = append(embed.Fields, DiscordEmbedField{
 			Name:   "Sockets",
-			Value:  fmt.Sprintf("%d", len(item.Sockets)),
+			Value:  socketStr,
 			Inline: true,
 		})
 	}
