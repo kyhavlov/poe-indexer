@@ -1,5 +1,6 @@
 poe-indexer
 poe-indexer.service
 vars.env
+vars.sh
 
-*.json
+*req.json

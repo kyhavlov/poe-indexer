@@ -114,7 +114,9 @@ func makeDiscordEmbed(item Item) DiscordEmbed {
 		embed.Title = item.TypeLine
 		embed.Description = item.Note
 	}
-	embed.Description += fmt.Sprintf("\nilvl: %d", item.Ilvl)
+	if item.Ilvl > 0 {
+		embed.Description += fmt.Sprintf("\nilvl: %d", item.Ilvl)
+	}
 
 	addStringArrayField := func(name string, array []string) {
 		if len(array) > 0 {

@@ -1,0 +1,187 @@
+{
+	"mappings": {
+		"runtime": {
+			"price_chaos": {
+				"type": "double",
+				"script": {
+					"source": "\n        if (doc[\"price_currency\"].size() == 0 || doc[\"price_value\"].size() == 0) {\n          return;\n        }\n      \n        double baseValue = 1.0;\n        if (doc[\"price_currency\"].value == \"exalted\") {\n            baseValue = 127.0;\n        }\n        if (doc[\"price_currency\"].value == \"mirror\") {\n            baseValue = 23275.0;\n        }\n\n        emit(baseValue * doc[\"price_value\"].value);\n      ",
+					"lang": "painless"
+				}
+			}
+		},
+		"properties": {
+			"enchantMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"implicitMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"fracturedMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"explicitMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"craftedMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"utilityMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"veiledMods": {
+				"type": "nested",
+				"properties": {
+					"text": {
+						"type": "text"
+					},
+                    "average": {
+						"type": "double"
+					},
+					"values": {
+						"type": "double"
+					}
+				}
+			},
+			"extended": {
+				"properties": {
+					"category": {
+						"type": "keyword"
+					},
+                    "prefixes": {
+                        "type": "long"
+                    },
+                    "subcategories": {
+                        "type": "keyword"
+                    },
+                    "suffixes": {
+                        "type": "long"
+                    }
+				}
+			},
+			"additionalProperties": {
+				"type": "flattened"
+			},
+			"nextLevelRequirements": {
+				"type": "flattened"
+			},
+            "notableProperties": {
+				"type": "flattened"
+			},
+			"properties": {
+				"type": "flattened"
+			},
+			"requirements": {
+				"type": "flattened"
+			},
+			"note": {
+				"type": "text"
+			},
+			"price_currency": {
+				"type": "keyword"
+			},
+			"price_value": {
+				"type": "float"
+			},
+			"removed_at": {
+				"type": "date"
+			},
+			"searing": {
+				"type": "boolean"
+			},
+			"shaper": {
+				"type": "boolean"
+			},
+			"sockets": {
+				"properties": {
+					"attr": {
+						"type": "keyword"
+					},
+					"group": {
+						"type": "long"
+					},
+					"sColour": {
+						"type": "keyword"
+					}
+				}
+			},
+			"baseType": {
+				"type": "text"
+			},
+			"typeLine": {
+				"type": "text"
+			},
+			"x": {
+				"type": "long"
+			},
+			"y": {
+				"type": "long"
+			}
+		}
+	}
+}

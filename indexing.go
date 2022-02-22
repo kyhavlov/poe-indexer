@@ -8,11 +8,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+const mappingIndex = "stash-mappings"
+const itemIndexPrefix = "items"
 
 func fetchItems(updateCh chan []PlayerStash) {
 	client := &http.Client{}
@@ -31,14 +33,14 @@ func fetchItems(updateCh chan []PlayerStash) {
 			continue
 		}
 
-		updateCh <- response.Stashes
-		//fmt.Printf("Processing items for change ID %s\n", currentID)
-
 		if len(response.Stashes) == 0 {
 			fmt.Println("Reached the end of the stream, waiting for updates...")
 			time.Sleep(rateLimit)
 			continue
 		}
+
+		updateCh <- response.Stashes
+		//fmt.Printf("Processing items for change ID %s\n", currentID)
 
 		// Update stored change ID
 		if err := persistChangeID(response.NextChangeID); err != nil {
@@ -78,6 +80,12 @@ func diffStashLoop(updateCh chan []PlayerStash, persistCh chan itemUpdate) {
 				}
 
 				stashCount += 1
+				formattedItems := make([]*IndexedItem, 0, len(stash.Items))
+				for _, item := range stash.Items {
+					formattedItems = append(formattedItems, item.ToIndexedItem())
+				}
+				stash.FormattedItems = formattedItems
+				stash.Items = nil
 
 				leagueStashes = append(leagueStashes, stash)
 			}
@@ -134,7 +142,7 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 	body.WriteString(`]}`)
 
 	rawBody := string(body.Bytes())
-	req, err := http.NewRequest("POST", ESURL+"stash-mappings/_mget", body)
+	req, err := http.NewRequest("POST", ESURL+mappingIndex+"/_mget", body)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +200,8 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 			continue
 		}
 
-		currentStashes[stash.ID] = make(map[string]bool, len(stash.Items))
-		for _, item := range stash.Items {
+		currentStashes[stash.ID] = make(map[string]bool, len(stash.FormattedItems))
+		for _, item := range stash.FormattedItems {
 			currentStashes[stash.ID][item.ID] = true
 		}
 	}
@@ -228,7 +236,7 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 		return
 	}
 
-	leagueIndex := "items-archnemesis"
+	leagueIndex := itemIndexPrefix + "-archnemesis"
 	for _, itemID := range update.deletes {
 		body.WriteString(fmt.Sprintf(`{"update":{"_index":"%s","_id":"%s"}}`+"\n", leagueIndex, itemID))
 		body.WriteString(fmt.Sprintf(`{"doc":{"removed_at":"%s"}}`+"\n", date))
@@ -237,24 +245,12 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 	for _, stash := range update.stashes {
 		stashCount += 1
 
-		index := strings.ToLower(fmt.Sprintf("items-%v", stash.League))
-		stashItemIDs := make([]string, 0, len(stash.Items))
-		for _, item := range stash.Items {
+		index := strings.ToLower(fmt.Sprintf("%s-%v", itemIndexPrefix, stash.League))
+		stashItemIDs := make([]string, 0, len(stash.FormattedItems))
+		for _, item := range stash.FormattedItems {
 			item.Account = stash.AccountName
 			item.LastUpdated = date
 			stashItemIDs = append(stashItemIDs, item.ID)
-
-			matches := priceString.FindStringSubmatch(item.Note)
-			if matches == nil {
-				matches = priceString.FindStringSubmatch(item.InventoryID)
-			}
-			if matches != nil && len(matches) > 2 {
-				value, err := strconv.ParseFloat(matches[1], 32)
-				if err == nil {
-					item.PriceValue = JSONDouble(value)
-				}
-				item.PriceCurrency = matches[2]
-			}
 
 			// Blank out item.ID so it doesn't get indexed
 			id := item.ID
@@ -266,7 +262,7 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 			body.WriteString("\n")
 		}
 
-		body.WriteString(fmt.Sprintf(`{"index":{"_index": "stash-mappings", "_id":"%s"}}`+"\n", stash.ID))
+		body.WriteString(fmt.Sprintf(`{"index":{"_index": "%s", "_id":"%s"}}`+"\n", mappingIndex, stash.ID))
 		stashBytes, _ := json.Marshal(StashMapping{
 			LastUpdated: date,
 			ItemIDs:     stashItemIDs,
@@ -274,7 +270,7 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 		body.Write(stashBytes)
 		body.WriteString("\n")
 
-		itemCount += len(stash.Items)
+		itemCount += len(stash.FormattedItems)
 	}
 
 	rawBody := string(body.Bytes())

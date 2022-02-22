@@ -26,13 +26,17 @@ func main() {
 	fmt.Printf("ES_URL: %s\n", ESURL)
 	fmt.Printf("DISCORD_HOOK: %s\n", DiscordURL)
 
+	setupIndexes()
+	//os.Exit(1)
+	//return
+
 	// Set up the indexer to track items with a price from our chosen league
 	updateCh := make(chan []PlayerStash, 4)
 	persistCh := make(chan itemUpdate, 4)
 	go diffStashLoop(updateCh, persistCh)
 	go persistItemLoop(persistCh)
 
-	go expensiveSoldItemAlertLoop()
+	//go expensiveSoldItemAlertLoop()
 
 	fetchItems(updateCh)
 

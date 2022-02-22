@@ -6,37 +6,191 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
+var floatExpr = regexp.MustCompile(`(?:\s+-)?\d[\d,]*[\.]?[\d{2}]*`)
+
 type Item struct {
+	// Raw fields from stash api
+	EnchantMods   []string `json:"enchantMods,omitempty"`
+	ImplicitMods  []string `json:"implicitMods,omitempty"`
+	FracturedMods []string `json:"fracturedMods,omitempty"`
+	ExplicitMods  []string `json:"explicitMods,omitempty"`
+	CraftedMods   []string `json:"craftedMods,omitempty"`
+	VeiledMods    []string `json:"veiledMods,omitempty"`
+	UtilityMods   []string `json:"utilityMods,omitempty"`
+
+	AdditionalProperties  Properties `json:"additionalProperties,omitempty"`
+	NotableProperties     Properties `json:"notableProperties,omitempty"`
+	Properties            Properties `json:"properties,omitempty"`
+	Requirements          Properties `json:"requirements,omitempty"`
+	NextLevelRequirements Properties `json:"nextLevelRequirements,omitempty"`
+
+	ItemCommon
+}
+
+func (i *Item) ToIndexedItem() *IndexedItem {
+	out := &IndexedItem{
+		ItemCommon: i.ItemCommon,
+	}
+
+	// Pull out price data
+	matches := priceString.FindStringSubmatch(i.Note)
+	if matches == nil {
+		matches = priceString.FindStringSubmatch(i.InventoryID)
+	}
+	if matches != nil && len(matches) > 2 {
+		value, err := strconv.ParseFloat(matches[1], 32)
+		if err == nil {
+			out.PriceValue = JSONDouble(value)
+		}
+		out.PriceCurrency = matches[2]
+	}
+
+	// Calculate socket links
+	groupCounts := make(map[int]int)
+	for _, socket := range i.Sockets {
+		groupCounts[socket.Group]++
+	}
+	for _, count := range groupCounts {
+		if count > out.SocketCount {
+			out.SocketLinks = count
+		}
+	}
+	out.SocketCount = len(i.Sockets)
+
+	// Reformat mod lists
+	formatMods := func(mods []string) []Modifier {
+		out := make([]Modifier, 0, len(mods))
+		for _, mod := range mods {
+			submatchall := floatExpr.FindAllString(mod, -1)
+			newMod := mod
+
+			var average *float64
+			var values []JSONDouble
+			for _, element := range submatchall {
+				newMod = strings.Replace(newMod, element, "#", 1)
+				value, _ := strconv.ParseFloat(element, 32)
+				if average == nil {
+					average = &value
+				} else {
+					*average += value
+				}
+				values = append(values, JSONDouble(value))
+			}
+			if average != nil {
+				*average /= float64(len(values))
+			}
+
+			modifier := Modifier{
+				Text:   newMod,
+				Values: values,
+			}
+			if len(values) > 1 {
+				avg := JSONDouble(*average)
+				modifier.Average = &avg
+			}
+			out = append(out, modifier)
+		}
+		return out
+	}
+
+	out.EnchantMods = formatMods(i.EnchantMods)
+	out.ImplicitMods = formatMods(i.ImplicitMods)
+	out.FracturedMods = formatMods(i.FracturedMods)
+	out.ExplicitMods = formatMods(i.ExplicitMods)
+	out.CraftedMods = formatMods(i.CraftedMods)
+	out.VeiledMods = formatMods(i.VeiledMods)
+	out.UtilityMods = formatMods(i.UtilityMods)
+
+	flattenProperties := func(props Properties) map[string]string {
+		out := make(map[string]string)
+		for _, prop := range props {
+			if strings.Contains(prop.Name, ",") {
+				continue
+			}
+			val := ""
+			if len(prop.Values) == 1 && len(prop.Values[0]) == 1 {
+				val = prop.Values[0][0]
+			}
+			sanitizedName := strings.ToLower(strings.Replace(prop.Name, " ", "_", -1))
+			if sanitizedName != "" {
+				out[sanitizedName] = val
+			} else {
+				out[val] = ""
+			}
+
+		}
+		return out
+	}
+
+	out.AdditionalProperties = flattenProperties(i.AdditionalProperties)
+	out.NotableProperties = flattenProperties(i.NotableProperties)
+	out.Properties = flattenProperties(i.Properties)
+	out.Requirements = flattenProperties(i.Requirements)
+	out.NextLevelRequirements = flattenProperties(i.NextLevelRequirements)
+
+	return out
+}
+
+type IndexedItem struct {
 	// Derived metadata fields
-	Account       string     `json:"account,omitempty"`
-	StashID       string     `json:"stashId,omitempty"`
-	Created       int64      `json:"created,omitempty"`
-	LastUpdated   string     `json:"last_updated,omitempty"`
-	Removed       int64      `json:"removed,omitempty"`
+	Account     string `json:"account,omitempty"`
+	StashID     string `json:"stashId,omitempty"`
+	LastUpdated string `json:"last_updated,omitempty"`
+
 	PriceValue    JSONDouble `json:"price_value,omitempty"`
 	PriceCurrency string     `json:"price_currency,omitempty"`
 
-	Verified          bool     `json:"verified,omitempty"`
-	Ilvl              int      `json:"ilvl,omitempty"`
-	Support           bool     `json:"support,omitempty"`
-	ID                string   `json:"id,omitempty"`
-	Sockets           []Socket `json:"sockets,omitempty"`
-	Name              string   `json:"name,omitempty"`
-	TypeLine          string   `json:"typeLine,omitempty"`
-	BaseType          string   `json:"baseType,omitempty"`
-	LockedToCharacter bool     `json:"lockedToCharacter,omitempty"`
-	Note              string   `json:"note,omitempty"`
-	FrameType         int      `json:"frameType,omitempty"`
-	X                 int      `json:"x,omitempty"`
-	Y                 int      `json:"y,omitempty"`
-	InventoryID       string   `json:"inventoryId,omitempty"`
-	TalismanTier      int      `json:"talismanTier,omitempty"`
-	AbyssJewel        bool     `json:"abyssJewel,omitempty"`
-	StackSize         int      `json:"stackSize,omitempty"`
-	MaxStackSize      int      `json:"maxStackSize,omitempty"`
+	SocketCount int `json:"socketCount,omitempty"`
+	SocketLinks int `json:"socketLinks,omitempty"`
+
+	// Formatted fields
+	EnchantMods   []Modifier `json:"enchantMods,omitempty"`
+	ImplicitMods  []Modifier `json:"implicitMods,omitempty"`
+	FracturedMods []Modifier `json:"fracturedMods,omitempty"`
+	ExplicitMods  []Modifier `json:"explicitMods,omitempty"`
+	CraftedMods   []Modifier `json:"craftedMods,omitempty"`
+	VeiledMods    []Modifier `json:"veiledMods,omitempty"`
+	UtilityMods   []Modifier `json:"utilityMods,omitempty"`
+
+	AdditionalProperties  map[string]string `json:"additionalProperties,omitempty"`
+	NotableProperties     map[string]string `json:"notableProperties,omitempty"`
+	Properties            map[string]string `json:"properties,omitempty"`
+	Requirements          map[string]string `json:"requirements,omitempty"`
+	NextLevelRequirements map[string]string `json:"nextLevelRequirements,omitempty"`
+
+	ItemCommon
+}
+
+type Modifier struct {
+	Text    string       `json:"text"`
+	Average *JSONDouble  `json:"average,omitempty"`
+	Values  []JSONDouble `json:"values,omitempty"`
+}
+
+type ItemCommon struct {
+	Verified          bool   `json:"verified,omitempty"`
+	Ilvl              int    `json:"ilvl,omitempty"`
+	Support           bool   `json:"support,omitempty"`
+	ID                string `json:"id,omitempty"`
+	Name              string `json:"name,omitempty"`
+	TypeLine          string `json:"typeLine,omitempty"`
+	BaseType          string `json:"baseType,omitempty"`
+	LockedToCharacter bool   `json:"lockedToCharacter,omitempty"`
+	Note              string `json:"note,omitempty"`
+	FrameType         int    `json:"frameType,omitempty"`
+	X                 int    `json:"x,omitempty"`
+	Y                 int    `json:"y,omitempty"`
+	InventoryID       string `json:"inventoryId,omitempty"`
+	TalismanTier      int    `json:"talismanTier,omitempty"`
+	AbyssJewel        bool   `json:"abyssJewel,omitempty"`
+	StackSize         int    `json:"stackSize,omitempty"`
+	MaxStackSize      int    `json:"maxStackSize,omitempty"`
 
 	Identified  bool            `json:"identified,omitempty"`
 	Corrupted   bool            `json:"corrupted"`
@@ -50,25 +204,20 @@ type Item struct {
 	Fractured   bool            `json:"fractured,omitempty"`
 	Influences  map[string]bool `json:"influences,omitempty"`
 
-	AdditionalProperties  Properties `json:"additionalProperties,omitempty"`
-	NotableProperties     Properties `json:"notableProperties,omitempty"`
-	Properties            Properties `json:"properties,omitempty"`
-	Requirements          Properties `json:"requirements,omitempty"`
-	NextLevelRequirements Properties `json:"nextLevelRequirements,omitempty"`
-	ImplicitMods          []string   `json:"implicitMods,omitempty"`
-	FracturedMods         []string   `json:"fracturedMods,omitempty"`
-	ExplicitMods          []string   `json:"explicitMods,omitempty"`
-	CraftedMods           []string   `json:"craftedMods,omitempty"`
-	VeiledMods            []string   `json:"veiledMods,omitempty"`
-	EnchantMods           []string   `json:"enchantMods,omitempty"`
-	UtilityMods           []string   `json:"utilityMods,omitempty"`
-	Extended              Extended   `json:"extended,omitempty"`
+	Sockets  []Socket `json:"sockets,omitempty"`
+	Extended Extended `json:"extended,omitempty"`
 }
 
 type JSONDouble float64
 
 func (d JSONDouble) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%.1f\n", d)), nil
+	str := fmt.Sprintf("%v\n", d)
+	idx := strings.Index(str, ".")
+	if idx != -1 {
+		str = str[:idx+3]
+	}
+
+	return []byte(str), nil
 }
 
 type Extended struct {
@@ -134,14 +283,15 @@ type APIResponse struct {
 }
 
 type PlayerStash struct {
-	AccountName       string  `json:"accountName"`
-	LastCharacterName string  `json:"lastCharacterName"`
-	ID                string  `json:"id"`
-	Stash             string  `json:"stash"`
-	StashType         string  `json:"stashType"`
-	Items             []*Item `json:"items"`
-	Public            bool    `json:"public"`
-	League            string  `json:"league"`
+	AccountName       string         `json:"accountName"`
+	LastCharacterName string         `json:"lastCharacterName"`
+	ID                string         `json:"id"`
+	Stash             string         `json:"stash"`
+	StashType         string         `json:"stashType"`
+	Items             []*Item        `json:"items"`
+	FormattedItems    []*IndexedItem `json:"-"`
+	Public            bool           `json:"public"`
+	League            string         `json:"league"`
 }
 
 func getNextStashes(currentID string, client *http.Client) (*APIResponse, error) {
