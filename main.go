@@ -4,15 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"regexp"
 )
 
 const ESDateFormat = "2006-01-02T15:04:05-0700"
 
 var (
-	priceString = regexp.MustCompile(`~price (?P<Value>[0-9]*[.]?[0-9]+) (?P<Currency>\w+)`)
-	ESURL       = ""
-	DiscordURL  = ""
+	ESURL      = ""
+	DiscordURL = ""
 )
 
 func main() {
@@ -27,8 +25,6 @@ func main() {
 	fmt.Printf("DISCORD_HOOK: %s\n", DiscordURL)
 
 	setupIndexes()
-	//os.Exit(1)
-	//return
 
 	// Set up the indexer to track items with a price from our chosen league
 	updateCh := make(chan []PlayerStash, 4)
@@ -36,7 +32,7 @@ func main() {
 	go diffStashLoop(updateCh, persistCh)
 	go persistItemLoop(persistCh)
 
-	//go expensiveSoldItemAlertLoop()
+	go expensiveSoldItemAlertLoop()
 
 	fetchItems(updateCh)
 

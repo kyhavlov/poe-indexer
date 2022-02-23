@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 type StashMappingResponse struct {
@@ -32,7 +33,9 @@ func setBasicAuth(req *http.Request) {
 }
 
 func doElasticsearchRequest(method, path string, body io.Reader, out interface{}) error {
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	req, err := http.NewRequest(method, ESURL+path, body)
 	if err != nil {
 		return err
@@ -73,7 +76,9 @@ func doElasticsearchRequest(method, path string, body io.Reader, out interface{}
 }
 
 func doDiscordRequest(body io.Reader) error {
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	req, err := http.NewRequest("POST", DiscordURL, body)
 	if err != nil {
 		return err

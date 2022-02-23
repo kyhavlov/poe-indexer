@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,8 +17,10 @@ import (
 const mappingIndex = "stash-mappings"
 const itemIndexPrefix = "items"
 
+var priceString = regexp.MustCompile(`\S+\s+(?P<Value>[0-9]*[.|/]?[0-9]+)\s+(?P<Currency>\w+)`)
+
 func fetchItems(updateCh chan []PlayerStash) {
-	client := &http.Client{}
+	client := &http.Client{Timeout: 10 * time.Second}
 	currentID, err := getChangeID()
 	if err != nil {
 		panic(err)
@@ -35,7 +38,7 @@ func fetchItems(updateCh chan []PlayerStash) {
 
 		if len(response.Stashes) == 0 {
 			fmt.Println("Reached the end of the stream, waiting for updates...")
-			time.Sleep(rateLimit)
+			time.Sleep(rateLimit * 2)
 			continue
 		}
 
@@ -46,7 +49,7 @@ func fetchItems(updateCh chan []PlayerStash) {
 		if err := persistChangeID(response.NextChangeID); err != nil {
 			fmt.Printf("Error persisting change ID: %v\n", err)
 			fmt.Println("Sleeping...")
-			time.Sleep(rateLimit)
+			time.Sleep(rateLimit * 2)
 			continue
 		}
 
@@ -109,7 +112,7 @@ func persistItemLoop(persistCh chan itemUpdate) {
 			start := time.Now()
 
 			var wg sync.WaitGroup
-			numWorkers := 4
+			numWorkers := 2
 			for i := 0; i < numWorkers; i++ {
 				updateChunk := itemUpdate{
 					stashes: update.stashes[i*len(update.stashes)/numWorkers : (i+1)*len(update.stashes)/numWorkers],
@@ -147,7 +150,9 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 		return nil, err
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	setBasicAuth(req)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
@@ -158,7 +163,7 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode != 200 {
 		fmt.Printf("Error: status code %d\n", resp.StatusCode)
 		fmt.Printf("Headers: %v\n", resp.Header)
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -169,7 +174,10 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 	}
 
 	var mappings StashMappingResponse
-	responseBody, _ := ioutil.ReadAll(resp.Body)
+	responseBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 	type changeResp struct {
 		Source map[string]string `json:"_source"`
 	}
@@ -289,7 +297,9 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 		return
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 	setBasicAuth(req)
 	req.Header.Set("Content-Type", "application/x-ndjson")
 	req.Header.Set("Content-Encoding", "gzip")

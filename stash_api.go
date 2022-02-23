@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var floatExpr = regexp.MustCompile(`(?:\s+-)?\d[\d,]*[\.]?[\d{2}]*`)
+var floatExpr = regexp.MustCompile(`-?\d[\d,]*[\.]?[\d{2}]*`)
 
 type Item struct {
 	// Raw fields from stash api
@@ -46,9 +46,17 @@ func (i *Item) ToIndexedItem() *IndexedItem {
 	if matches != nil && len(matches) > 2 {
 		value, err := strconv.ParseFloat(matches[1], 32)
 		if err == nil {
-			out.PriceValue = JSONDouble(value)
+			out.PriceValue = JSONFloat(value)
+			out.PriceCurrency = matches[2]
+		} else if strings.Contains(matches[1], "/") {
+			parts := strings.SplitN(matches[1], "/", 2)
+			a, _ := strconv.ParseFloat(parts[0], 32)
+			b, _ := strconv.ParseFloat(parts[1], 32)
+			if b != 0 {
+				out.PriceValue = JSONFloat(a / b)
+				out.PriceCurrency = matches[2]
+			}
 		}
-		out.PriceCurrency = matches[2]
 	}
 
 	// Calculate socket links
@@ -143,8 +151,8 @@ type IndexedItem struct {
 	StashID     string `json:"stashId,omitempty"`
 	LastUpdated string `json:"last_updated,omitempty"`
 
-	PriceValue    JSONDouble `json:"price_value,omitempty"`
-	PriceCurrency string     `json:"price_currency,omitempty"`
+	PriceValue    JSONFloat `json:"price_value,omitempty"`
+	PriceCurrency string    `json:"price_currency,omitempty"`
 
 	SocketCount int `json:"socketCount,omitempty"`
 	SocketLinks int `json:"socketLinks,omitempty"`
@@ -215,6 +223,29 @@ func (d JSONDouble) MarshalJSON() ([]byte, error) {
 	idx := strings.Index(str, ".")
 	if idx != -1 {
 		str = str[:idx+3]
+	}
+
+	return []byte(str), nil
+}
+
+type JSONFloat float64
+
+func (f JSONFloat) MarshalJSON() ([]byte, error) {
+	str := fmt.Sprintf("%v\n", f)
+	idx := strings.Index(str, ".")
+	if idx != -1 {
+		end := idx + 5
+		if len(str) < end {
+			end = len(str)
+		}
+		str = str[:end]
+		// Remove trailing deimcal zeros
+		for strings.HasSuffix(str, "0") {
+			if strings.HasSuffix(str, ".0") {
+				break
+			}
+			str = str[:len(str)-1]
+		}
 	}
 
 	return []byte(str), nil

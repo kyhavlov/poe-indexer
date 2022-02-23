@@ -35,7 +35,7 @@ const query = `{
 type ItemQueryResponse struct {
 	Hits struct {
 		Hits []struct {
-			Item Item `json:"_source"`
+			Item IndexedItem `json:"_source"`
 		} `json:"hits"`
 	} `json:"hits"`
 }
@@ -105,7 +105,7 @@ type DiscordEmbedField struct {
 	Inline bool   `json:"inline,omitempty"`
 }
 
-func makeDiscordEmbed(item Item) DiscordEmbed {
+func makeDiscordEmbed(item IndexedItem) DiscordEmbed {
 	embed := DiscordEmbed{
 		Title:       item.Name,
 		Description: item.TypeLine + "\n" + item.Note,
@@ -118,29 +118,41 @@ func makeDiscordEmbed(item Item) DiscordEmbed {
 		embed.Description += fmt.Sprintf("\nilvl: %d", item.Ilvl)
 	}
 
-	addStringArrayField := func(name string, array []string) {
-		if len(array) > 0 {
-			embed.Fields = append(embed.Fields, DiscordEmbedField{
-				Name:  name,
-				Value: strings.Join(array, "\n"),
-			})
+	addStringArrayField := func(name string, mods []Modifier) {
+		if len(mods) == 0 {
+			return
 		}
+
+		modText := ""
+		for _, mod := range mods {
+			str := mod.Text
+			for _, value := range mod.Values {
+				val, _ := json.Marshal(value)
+				str = strings.Replace(str, "#", string(val), 1)
+			}
+			if modText == "" {
+				modText = str
+			} else {
+				modText += "\n" + str
+			}
+		}
+
+		embed.Fields = append(embed.Fields, DiscordEmbedField{
+			Name:  name,
+			Value: modText,
+		})
 	}
 
 	if item.Extended.Category == "gems" {
-		for _, prop := range item.Properties {
-			if prop.Name == "Level" {
-				embed.Fields = append(embed.Fields, DiscordEmbedField{
-					Name:  "Gem Level",
-					Value: prop.Values[0][0],
-				})
-			}
-			if prop.Name == "Quality" {
-				embed.Fields = append(embed.Fields, DiscordEmbedField{
-					Name:  "Gem Quality",
-					Value: prop.Values[0][0],
-				})
-			}
+		embed.Fields = append(embed.Fields, DiscordEmbedField{
+			Name:  "Gem Level",
+			Value: item.Properties["level"],
+		})
+		if item.Properties["quality"] != "" {
+			embed.Fields = append(embed.Fields, DiscordEmbedField{
+				Name:  "Gem Quality",
+				Value: item.Properties["quality"],
+			})
 		}
 	}
 
