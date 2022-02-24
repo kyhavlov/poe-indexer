@@ -70,6 +70,10 @@ type itemUpdate struct {
 }
 
 func diffStashLoop(updateCh chan []PlayerStash, persistCh chan itemUpdate) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	for {
 		select {
 		case stashes := <-updateCh:
@@ -93,7 +97,7 @@ func diffStashLoop(updateCh chan []PlayerStash, persistCh chan itemUpdate) {
 				leagueStashes = append(leagueStashes, stash)
 			}
 
-			deletes, err := diffStashes(leagueStashes)
+			deletes, err := diffStashes(client, leagueStashes)
 
 			if err != nil {
 				fmt.Printf("Error diffing stashes: %v\n", err)
@@ -130,7 +134,7 @@ func persistItemLoop(persistCh chan itemUpdate) {
 	}
 }
 
-func diffStashes(stashes []PlayerStash) ([]string, error) {
+func diffStashes(client *http.Client, stashes []PlayerStash) ([]string, error) {
 	start := time.Now()
 
 	// Fetch stash mappings from db
@@ -150,9 +154,6 @@ func diffStashes(stashes []PlayerStash) ([]string, error) {
 		return nil, err
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
 	setBasicAuth(req)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)

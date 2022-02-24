@@ -14,7 +14,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -28,7 +28,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -42,7 +42,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -56,7 +56,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -70,7 +70,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -84,7 +84,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -98,7 +98,7 @@
 				"type": "nested",
 				"properties": {
 					"text": {
-						"type": "text"
+						"type": "keyword"
 					},
                     "average": {
 						"type": "double"
@@ -139,7 +139,16 @@
 			"requirements": {
 				"type": "flattened"
 			},
+			"account": {
+				"type": "keyword"
+			},
 			"note": {
+				"type": "text"
+			},
+			"inventoryId": {
+				"type": "text"
+			},
+			"name": {
 				"type": "text"
 			},
 			"price_currency": {
@@ -171,10 +180,10 @@
 				}
 			},
 			"baseType": {
-				"type": "text"
+				"type": "keyword"
 			},
 			"typeLine": {
-				"type": "text"
+				"type": "keyword"
 			},
 			"x": {
 				"type": "long"
