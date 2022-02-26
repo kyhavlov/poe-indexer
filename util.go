@@ -45,6 +45,12 @@ func doElasticsearchRequest(method, path string, body io.Reader, out interface{}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			err := resp.Body.Close()
+			if err != nil {
+				panic(err)
+			}
+		}
 		return err
 	}
 	defer resp.Body.Close()
@@ -87,6 +93,7 @@ func doDiscordRequest(body io.Reader) error {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
+		resp.Body.Close()
 		return err
 	}
 	defer resp.Body.Close()

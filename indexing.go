@@ -149,40 +149,10 @@ func diffStashes(client *http.Client, stashes []PlayerStash) ([]string, error) {
 	body.WriteString(`]}`)
 
 	rawBody := string(body.Bytes())
-	req, err := http.NewRequest("POST", ESURL+mappingIndex+"/_mget", body)
-	if err != nil {
-		return nil, err
-	}
-
-	setBasicAuth(req)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Logging request body to diff_req.json")
-		os.WriteFile("diff_req.json", []byte(rawBody), 0644)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		fmt.Printf("Error: status code %d\n", resp.StatusCode)
-		fmt.Printf("Headers: %v\n", resp.Header)
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Println("Response Body:", string(body))
-		fmt.Println("Logging request body to diff_req.json")
-		os.WriteFile("diff_req.json", []byte(rawBody), 0644)
-		return nil, nil
-	}
-
 	var mappings StashMappingResponse
-	responseBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	type changeResp struct {
-		Source map[string]string `json:"_source"`
-	}
-	if err := json.Unmarshal(responseBody, &mappings); err != nil {
+	if err := doElasticsearchRequest("GET", mappingIndex+"/_mget", body, &mappings); err != nil {
+		fmt.Println("Logging request body to diff_req.json")
+		os.WriteFile("diff_req.json", []byte(rawBody), 0644)
 		return nil, err
 	}
 
@@ -306,6 +276,7 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 	req.Header.Set("Content-Encoding", "gzip")
 	resp, err := client.Do(req)
 	if err != nil {
+		resp.Body.Close()
 		fmt.Printf("Error in response persisting items: %v\n", err)
 		return
 	}

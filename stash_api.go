@@ -44,14 +44,14 @@ func (i *Item) ToIndexedItem() *IndexedItem {
 		matches = priceString.FindStringSubmatch(i.InventoryID)
 	}
 	if matches != nil && len(matches) > 2 {
-		value, err := strconv.ParseFloat(matches[1], 32)
+		value, err := strconv.ParseFloat(matches[1], 64)
 		if err == nil {
 			out.PriceValue = JSONFloat(value)
 			out.PriceCurrency = matches[2]
 		} else if strings.Contains(matches[1], "/") {
 			parts := strings.SplitN(matches[1], "/", 2)
-			a, _ := strconv.ParseFloat(parts[0], 32)
-			b, _ := strconv.ParseFloat(parts[1], 32)
+			a, _ := strconv.ParseFloat(parts[0], 64)
+			b, _ := strconv.ParseFloat(parts[1], 64)
 			if b != 0 {
 				out.PriceValue = JSONFloat(a / b)
 				out.PriceCurrency = matches[2]
@@ -82,7 +82,7 @@ func (i *Item) ToIndexedItem() *IndexedItem {
 			var values []JSONDouble
 			for _, element := range submatchall {
 				newMod = strings.Replace(newMod, element, "#", 1)
-				value, _ := strconv.ParseFloat(element, 32)
+				value, _ := strconv.ParseFloat(element, 64)
 				if average == nil {
 					average = &value
 				} else {
@@ -114,6 +114,14 @@ func (i *Item) ToIndexedItem() *IndexedItem {
 	out.CraftedMods = formatMods(i.CraftedMods)
 	out.VeiledMods = formatMods(i.VeiledMods)
 	out.UtilityMods = formatMods(i.UtilityMods)
+
+	out.ModCount.Enchant = len(out.EnchantMods)
+	out.ModCount.Implicit = len(out.ImplicitMods)
+	out.ModCount.Fractured = len(out.FracturedMods)
+	out.ModCount.Explicit = len(out.ExplicitMods)
+	out.ModCount.Crafted = len(out.CraftedMods)
+	out.ModCount.Veiled = len(out.VeiledMods)
+	out.ModCount.Utility = len(out.UtilityMods)
 
 	flattenProperties := func(props Properties) map[string]string {
 		out := make(map[string]string)
@@ -157,6 +165,8 @@ type IndexedItem struct {
 	SocketCount int `json:"socketCount,omitempty"`
 	SocketLinks int `json:"socketLinks,omitempty"`
 
+	ModCount ModCounts `json:"modCount,omitempty"`
+
 	// Formatted fields
 	EnchantMods   []Modifier `json:"enchantMods,omitempty"`
 	ImplicitMods  []Modifier `json:"implicitMods,omitempty"`
@@ -173,6 +183,16 @@ type IndexedItem struct {
 	NextLevelRequirements map[string]string `json:"nextLevelRequirements,omitempty"`
 
 	ItemCommon
+}
+
+type ModCounts struct {
+	Enchant   int `json:"enchant,omitempty"`
+	Implicit  int `json:"implicit,omitempty"`
+	Fractured int `json:"fractured,omitempty"`
+	Explicit  int `json:"explicit,omitempty"`
+	Crafted   int `json:"crafted,omitempty"`
+	Veiled    int `json:"veiled,omitempty"`
+	Utility   int `json:"utility,omitempty"`
 }
 
 type Modifier struct {
@@ -335,6 +355,7 @@ func getNextStashes(currentID string, client *http.Client) (*APIResponse, error)
 
 	response, err := client.Do(req)
 	if err != nil {
+		response.Body.Close()
 		fmt.Printf("Error getting request: %v\n", err)
 		return nil, err
 	}

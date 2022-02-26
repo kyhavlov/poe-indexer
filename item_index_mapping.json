@@ -149,7 +149,7 @@
 				"type": "text"
 			},
 			"name": {
-				"type": "text"
+				"type": "keyword"
 			},
 			"price_currency": {
 				"type": "keyword"
