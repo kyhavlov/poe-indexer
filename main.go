@@ -37,7 +37,7 @@ func main() {
 	go persistItemLoop(persistCh, changeCh)
 	go updateChangeIDLoop(client, changeCh)
 
-	go expensiveSoldItemAlertLoop()
+	//go expensiveSoldItemAlertLoop()
 
 	fetchItems(client, updateCh)
 

@@ -26,6 +26,14 @@ type StashMapping struct {
 	ItemIDs     []string `json:"item_ids"`
 }
 
+type BulkItemResponse struct {
+	Docs []struct {
+		ID     string      `json:"_id"`
+		Found  bool        `json:"found"`
+		Source IndexedItem `json:"_source"`
+	} `json:"docs"`
+}
+
 func setBasicAuth(req *http.Request) {
 	user := os.Getenv("ES_USERNAME")
 	pass := os.Getenv("ES_PASSWORD")

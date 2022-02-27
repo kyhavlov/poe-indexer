@@ -191,7 +191,9 @@ type IndexedItem struct {
 	// Derived metadata fields
 	Account     string `json:"account,omitempty"`
 	StashID     string `json:"stashId,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"`
 	LastUpdated string `json:"last_updated,omitempty"`
+	create      bool   `json:"-"`
 
 	PriceValue    JSONFloat `json:"price_value,omitempty"`
 	PriceCurrency string    `json:"price_currency,omitempty"`
@@ -374,6 +376,7 @@ type PlayerStash struct {
 	Stash             string         `json:"stash"`
 	StashType         string         `json:"stashType"`
 	Items             []*Item        `json:"items"`
+	ItemIDs           []string       `json:"-"`
 	FormattedItems    []*IndexedItem `json:"-"`
 	Public            bool           `json:"public"`
 	League            string         `json:"league"`
