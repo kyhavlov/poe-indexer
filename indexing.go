@@ -17,41 +17,31 @@ import (
 const mappingIndex = "stash-mappings"
 const itemIndexPrefix = "items"
 
+const rateLimit = 500 * time.Millisecond
+
 var priceString = regexp.MustCompile(`\S+\s+(?P<Value>[0-9]*[.|/]?[0-9]+)\s+(?P<Currency>\w+)`)
 
-func fetchItems(updateCh chan []PlayerStash) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	currentID, err := getChangeID()
+func fetchItems(client *http.Client, updateCh chan itemUpdate) {
+	currentID, err := getChangeID(client)
 	if err != nil {
 		panic(err)
 	}
 
-	rateLimit := 500 * time.Millisecond
-
 	for {
 		start := time.Now()
-		response, err := getNextStashes(currentID, client)
+		response, err := getNextStashes(client, currentID)
 		if err != nil {
 			fmt.Printf("Error getting stashes: %v\n", err)
 			continue
 		}
 
 		if len(response.Stashes) == 0 {
-			fmt.Println("Reached the end of the stream, waiting for updates...")
+			fmt.Println(">>> Reached the end of the stream, waiting for updates...")
 			time.Sleep(rateLimit * 2)
 			continue
 		}
 
-		updateCh <- response.Stashes
-		//fmt.Printf("Processing items for change ID %s\n", currentID)
-
-		// Update stored change ID
-		if err := persistChangeID(response.NextChangeID); err != nil {
-			fmt.Printf("Error persisting change ID: %v\n", err)
-			fmt.Println("Sleeping...")
-			time.Sleep(rateLimit * 2)
-			continue
-		}
+		updateCh <- itemUpdate{changeID: response.NextChangeID, stashes: response.Stashes}
 
 		// Sleep so we don't request too frequently (more than once per second)
 		end := time.Now()
@@ -65,21 +55,18 @@ func fetchItems(updateCh chan []PlayerStash) {
 }
 
 type itemUpdate struct {
-	stashes []PlayerStash
-	deletes []string
+	changeID string
+	stashes  []PlayerStash
+	deletes  []string
 }
 
-func diffStashLoop(updateCh chan []PlayerStash, persistCh chan itemUpdate) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+func diffStashLoop(client *http.Client, updateCh chan itemUpdate, persistCh chan itemUpdate) {
 	for {
 		select {
-		case stashes := <-updateCh:
+		case update := <-updateCh:
 			var leagueStashes []PlayerStash
 			stashCount := 0
-			for _, stash := range stashes {
+			for _, stash := range update.stashes {
 				if stash.League == "Standard" ||
 					stash.League == "Hardcore" ||
 					strings.Contains(stash.League, " ") {
@@ -104,19 +91,19 @@ func diffStashLoop(updateCh chan []PlayerStash, persistCh chan itemUpdate) {
 				continue
 			}
 
-			persistCh <- itemUpdate{stashes: leagueStashes, deletes: deletes}
+			persistCh <- itemUpdate{changeID: update.changeID, stashes: leagueStashes, deletes: deletes}
 		}
 	}
 }
 
-func persistItemLoop(persistCh chan itemUpdate) {
+func persistItemLoop(persistCh chan itemUpdate, changeCh chan string) {
 	for {
 		select {
 		case update := <-persistCh:
 			start := time.Now()
 
 			var wg sync.WaitGroup
-			numWorkers := 2
+			numWorkers := 8
 			for i := 0; i < numWorkers; i++ {
 				updateChunk := itemUpdate{
 					stashes: update.stashes[i*len(update.stashes)/numWorkers : (i+1)*len(update.stashes)/numWorkers],
@@ -130,6 +117,19 @@ func persistItemLoop(persistCh chan itemUpdate) {
 
 			delta := time.Since(start)
 			fmt.Printf("Successfully persisted %d stashes and %d removals in %s\n", len(update.stashes), len(update.deletes), delta)
+			changeCh <- update.changeID
+		}
+	}
+}
+
+func updateChangeIDLoop(client *http.Client, changeCh chan string) {
+	for {
+		select {
+		case changeID := <-changeCh:
+			// Update stored change ID
+			if err := persistChangeID(client, changeID); err != nil {
+				fmt.Printf("Error persisting change ID: %v\n", err)
+			}
 		}
 	}
 }

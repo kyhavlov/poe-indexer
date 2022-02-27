@@ -34,7 +34,7 @@ func setBasicAuth(req *http.Request) {
 
 func doElasticsearchRequest(method, path string, body io.Reader, out interface{}) error {
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 	req, err := http.NewRequest(method, ESURL+path, body)
 	if err != nil {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"time"
 )
 
 const ESDateFormat = "2006-01-02T15:04:05-0700"
@@ -27,14 +29,17 @@ func main() {
 	setupIndexes()
 
 	// Set up the indexer to track items with a price from our chosen league
-	updateCh := make(chan []PlayerStash, 4)
+	client := &http.Client{Timeout: 30 * time.Second}
+	updateCh := make(chan itemUpdate, 4)
 	persistCh := make(chan itemUpdate, 4)
-	go diffStashLoop(updateCh, persistCh)
-	go persistItemLoop(persistCh)
+	changeCh := make(chan string, 4)
+	go diffStashLoop(client, updateCh, persistCh)
+	go persistItemLoop(persistCh, changeCh)
+	go updateChangeIDLoop(client, changeCh)
 
 	go expensiveSoldItemAlertLoop()
 
-	fetchItems(updateCh)
+	fetchItems(client, updateCh)
 
 	// Wait for interrupt signal
 	c := make(chan os.Signal, 1)

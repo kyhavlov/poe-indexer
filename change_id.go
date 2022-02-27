@@ -7,13 +7,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
 )
 
-func getChangeID() (string, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+func getChangeID(client *http.Client) (string, error) {
 	req, err := http.NewRequest("GET", ESURL+"next-change-id/_doc/0", nil)
 	if err != nil {
 		return "", err
@@ -46,11 +42,7 @@ func getChangeID() (string, error) {
 	return cr.Source["next_change_id"], nil
 }
 
-func persistChangeID(nextChangeID string) error {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+func persistChangeID(client *http.Client, nextChangeID string) error {
 	body := &bytes.Buffer{}
 	body.WriteString(fmt.Sprintf(`{"next_change_id": "%s"}`+"\n", nextChangeID))
 	req, err := http.NewRequest("POST", ESURL+"next-change-id/_doc/0", body)

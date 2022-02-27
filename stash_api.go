@@ -13,6 +13,7 @@ import (
 )
 
 var floatExpr = regexp.MustCompile(`-?\d[\d,]*[\.]?[\d{2}]*`)
+var rangeExpr = regexp.MustCompile(`\d+-\d+`)
 
 type Item struct {
 	// Raw fields from stash api
@@ -123,23 +124,56 @@ func (i *Item) ToIndexedItem() *IndexedItem {
 	out.ModCount.Veiled = len(out.VeiledMods)
 	out.ModCount.Utility = len(out.UtilityMods)
 
-	flattenProperties := func(props Properties) map[string]string {
-		out := make(map[string]string)
+	flattenProperties := func(props Properties) map[string]interface{} {
+		out := make(map[string]interface{})
 		for _, prop := range props {
 			if strings.Contains(prop.Name, ",") {
 				continue
 			}
-			val := ""
-			if len(prop.Values) == 1 && len(prop.Values[0]) == 1 {
-				val = prop.Values[0][0]
-			}
 			sanitizedName := strings.ToLower(strings.Replace(prop.Name, " ", "_", -1))
-			if sanitizedName != "" {
-				out[sanitizedName] = val
-			} else {
-				out[val] = ""
+			if sanitizedName == "" {
+				if len(prop.Values) == 1 && len(prop.Values[0]) == 1 {
+					out[prop.Values[0][0]] = ""
+					continue
+				}
 			}
 
+			if len(prop.Values) == 1 && len(prop.Values[0]) == 1 {
+				out[sanitizedName] = prop.Values[0][0]
+				isRange := false
+				if rangeExpr.MatchString(prop.Values[0][0]) {
+					isRange = true
+					prop.Values[0][0] = strings.Replace(prop.Values[0][0], "-", " ", 1)
+				}
+				parsedVals := floatExpr.FindAllString(prop.Values[0][0], -1)
+
+				var average float64
+				valCount := 0
+				for _, element := range parsedVals {
+					value, _ := strconv.ParseFloat(element, 64)
+					if valCount == 0 {
+						average = value
+					} else {
+						average += value
+					}
+					valCount++
+					if !isRange {
+						break
+					}
+				}
+				if valCount > 0 {
+					average /= float64(valCount)
+					out[sanitizedName] = JSONFloat(average)
+				}
+			}
+
+			if len(prop.Values) > 1 {
+				values := make([]string, 0)
+				for _, val := range prop.Values {
+					values = append(values, val[0])
+				}
+				out[sanitizedName] = values
+			}
 		}
 		return out
 	}
@@ -176,11 +210,11 @@ type IndexedItem struct {
 	VeiledMods    []Modifier `json:"veiledMods,omitempty"`
 	UtilityMods   []Modifier `json:"utilityMods,omitempty"`
 
-	AdditionalProperties  map[string]string `json:"additionalProperties,omitempty"`
-	NotableProperties     map[string]string `json:"notableProperties,omitempty"`
-	Properties            map[string]string `json:"properties,omitempty"`
-	Requirements          map[string]string `json:"requirements,omitempty"`
-	NextLevelRequirements map[string]string `json:"nextLevelRequirements,omitempty"`
+	AdditionalProperties  map[string]interface{} `json:"additionalProperties,omitempty"`
+	NotableProperties     map[string]interface{} `json:"notableProperties,omitempty"`
+	Properties            map[string]interface{} `json:"properties,omitempty"`
+	Requirements          map[string]interface{} `json:"requirements,omitempty"`
+	NextLevelRequirements map[string]interface{} `json:"nextLevelRequirements,omitempty"`
 
 	ItemCommon
 }
@@ -345,7 +379,7 @@ type PlayerStash struct {
 	League            string         `json:"league"`
 }
 
-func getNextStashes(currentID string, client *http.Client) (*APIResponse, error) {
+func getNextStashes(client *http.Client, currentID string) (*APIResponse, error) {
 	start := time.Now()
 	req, err := http.NewRequest("GET", "http://api.pathofexile.com/public-stash-tabs?id="+currentID, nil)
 	if err != nil {

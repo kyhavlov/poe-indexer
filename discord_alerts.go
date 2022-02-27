@@ -146,12 +146,12 @@ func makeDiscordEmbed(item IndexedItem) DiscordEmbed {
 	if item.Extended.Category == "gems" {
 		embed.Fields = append(embed.Fields, DiscordEmbedField{
 			Name:  "Gem Level",
-			Value: item.Properties["level"],
+			Value: fmt.Sprintf("%v", item.Properties["level"]),
 		})
 		if item.Properties["quality"] != "" {
 			embed.Fields = append(embed.Fields, DiscordEmbedField{
 				Name:  "Gem Quality",
-				Value: item.Properties["quality"],
+				Value: fmt.Sprintf("%v", item.Properties["quality"]),
 			})
 		}
 	}
