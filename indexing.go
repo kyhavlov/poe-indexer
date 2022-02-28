@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -22,7 +21,8 @@ const rateLimit = 500 * time.Millisecond
 
 var priceString = regexp.MustCompile(`\S+\s+(?P<Value>[0-9]*[.|/]?[0-9]+)\s+(?P<Currency>\w+)`)
 
-func fetchItems(client *http.Client, updateCh chan itemUpdate) {
+// Fetch the next api response
+func fetchItems(client *http.Client, outputCh chan itemUpdate) {
 	currentID, err := getChangeID(client)
 	if err != nil {
 		panic(err)
@@ -38,11 +38,18 @@ func fetchItems(client *http.Client, updateCh chan itemUpdate) {
 
 		if len(response.Stashes) == 0 {
 			fmt.Println(">>> Reached the end of the stream, waiting for updates...")
-			time.Sleep(rateLimit * 2)
+
+			go logCaughtUpToRiver()
+
+			end := time.Now()
+			diff := end.Sub(start)
+			if diff < rateLimit {
+				time.Sleep(rateLimit - diff)
+			}
 			continue
 		}
 
-		updateCh <- itemUpdate{changeID: response.NextChangeID, stashes: response.Stashes}
+		outputCh <- itemUpdate{changeID: response.NextChangeID, stashes: response.Stashes}
 
 		// Sleep so we don't request too frequently (more than once per second)
 		end := time.Now()
@@ -55,16 +62,26 @@ func fetchItems(client *http.Client, updateCh chan itemUpdate) {
 	}
 }
 
-type itemUpdate struct {
-	changeID string
-	stashes  []PlayerStash
-	deletes  []string
+func logCaughtUpToRiver() {
+	date := time.Now().Format(ESDateFormat)
+	body := bytes.NewBufferString(`{"@timestamp": "` + date + `"}`)
+	if err := doElasticsearchRequest("POST", "liveness-log/_doc/", body, nil); err != nil {
+		fmt.Printf("error logging caught up to river: %v\n", err)
+	}
 }
 
-func diffStashLoop(client *http.Client, updateCh chan itemUpdate, persistCh chan itemUpdate) {
+type itemUpdate struct {
+	changeID        string
+	stashes         []PlayerStash
+	filteredStashes []PlayerStash
+	deletes         []string
+}
+
+// Filter out non-league stashes and format the items for storage
+func formatStashLoop(inputCh, outputCh chan itemUpdate) {
 	for {
 		select {
-		case update := <-updateCh:
+		case update := <-inputCh:
 			// Filter out non-league items and format for indexing
 			var leagueStashes []PlayerStash
 			stashCount := 0
@@ -88,138 +105,111 @@ func diffStashLoop(client *http.Client, updateCh chan itemUpdate, persistCh chan
 				leagueStashes = append(leagueStashes, stash)
 			}
 
-			filteredStashes := make([]PlayerStash, 0, len(leagueStashes))
-			createCount, noopCount, updateCount := 0, 0, 0
-			checkExisting := true
-
-			if checkExisting {
-				// Diff against existing items to detect no-ops
-				start := time.Now()
-				existingCh := make(chan []IndexedItem)
-				numWorkers := 8
-				for i := 0; i < numWorkers; i++ {
-					go getExistingItems(leagueStashes[i*len(leagueStashes)/numWorkers:(i+1)*len(leagueStashes)/numWorkers], existingCh)
-				}
-
-				existingMap := make(map[string]IndexedItem, 5000)
-				for i := 0; i < numWorkers; i++ {
-					foundItems := <-existingCh
-					for _, item := range foundItems {
-						existingMap[item.ID] = item
-					}
-				}
-
-				wrote := false
-				for _, stash := range leagueStashes {
-					var updates []*IndexedItem
-					for _, item := range stash.FormattedItems {
-						prevItem, ok := existingMap[item.ID]
-						if !ok {
-							item.create = true
-							createCount++
-							updates = append(updates, item)
-							continue
-						}
-
-						prevItem.Account = item.Account
-						prevItem.LastUpdated = item.LastUpdated
-						prevItem.CreatedAt = item.CreatedAt
-
-						bytesA, _ := json.Marshal(item)
-						bytesB, _ := json.Marshal(prevItem)
-
-						if bytes.Equal(bytesA, bytesB) {
-							noopCount++
-						} else {
-							if !wrote {
-								if _, err := os.Stat("cmp_prev_item.json"); errors.Is(err, os.ErrNotExist) {
-									os.WriteFile("cmp_new_item.json", bytesA, 0644)
-									os.WriteFile("cmp_prev_item.json", bytesB, 0644)
-								}
-								wrote = true
-							}
-
-							updateCount++
-							updates = append(updates, item)
-						}
-					}
-
-					filteredStashes = append(filteredStashes, PlayerStash{
-						ID:                stash.ID,
-						AccountName:       stash.AccountName,
-						LastCharacterName: stash.LastCharacterName,
-						Stash:             stash.Stash,
-						StashType:         stash.StashType,
-						League:            stash.League,
-						ItemIDs:           stash.ItemIDs,
-						FormattedItems:    updates,
-						Public:            stash.Public,
-					})
-				}
-
-				fmt.Printf("Looked up %v existing stashes in %v\n", len(leagueStashes), time.Since(start))
-			}
-
-			// Find removed items by comparing to previous stash contents
-			deletes, err := diffStashes(client, leagueStashes)
-
-			fmt.Printf("%d creates, %d updates, %d no-ops, %d deletes\n", createCount, updateCount, noopCount, len(deletes))
-
-			if err != nil {
-				fmt.Printf("Error diffing stashes: %v\n", err)
+			if len(leagueStashes) == 0 {
 				continue
 			}
 
+			update.stashes = leagueStashes
+			outputCh <- update
+		}
+	}
+}
+
+// Compare incoming items to previously seen state and filter out items that haven't changed
+func lookupItemLoop(inputCh, outputCh chan itemUpdate) {
+	for {
+		select {
+		case update := <-inputCh:
+			checkExisting := true
+
 			if !checkExisting {
-				filteredStashes = leagueStashes
+				outputCh <- update
+				continue
 			}
 
-			persistCh <- itemUpdate{changeID: update.changeID, stashes: filteredStashes, deletes: deletes}
+			filteredStashes := compareExistingItems(update.stashes)
+
+			outputCh <- itemUpdate{
+				changeID:        update.changeID,
+				stashes:         update.stashes,
+				filteredStashes: filteredStashes,
+			}
 		}
 	}
 }
 
-func persistItemLoop(persistCh chan itemUpdate, changeCh chan string) {
-	for {
-		select {
-		case update := <-persistCh:
-			start := time.Now()
+func compareExistingItems(stashes []PlayerStash) []PlayerStash {
+	filteredStashes := make([]PlayerStash, 0, len(stashes))
+	createCount, noopCount, updateCount := 0, 0, 0
 
-			itemCount := 0
-			for _, stash := range update.stashes {
-				itemCount += len(stash.FormattedItems)
-			}
+	// Diff against existing items to detect no-ops
+	start := time.Now()
+	existingCh := make(chan []IndexedItem)
+	numWorkers := 8
+	for i := 0; i < numWorkers; i++ {
+		go getExistingItems(stashes[i*len(stashes)/numWorkers:(i+1)*len(stashes)/numWorkers], existingCh)
+	}
 
-			var wg sync.WaitGroup
-			numWorkers := 8
-			for i := 0; i < numWorkers; i++ {
-				updateChunk := itemUpdate{
-					stashes: update.stashes[i*len(update.stashes)/numWorkers : (i+1)*len(update.stashes)/numWorkers],
-					deletes: update.deletes[i*len(update.deletes)/numWorkers : (i+1)*len(update.deletes)/numWorkers],
-				}
-
-				wg.Add(1)
-				go persistItems(updateChunk, &wg)
-			}
-			wg.Wait()
-
-			delta := time.Since(start)
-			fmt.Printf("Successfully persisted %d stashes (%d items) and %d removals in %s\n", len(update.stashes), itemCount, len(update.deletes), delta)
-			changeCh <- update.changeID
+	existingMap := make(map[string]IndexedItem, 5000)
+	for i := 0; i < numWorkers; i++ {
+		foundItems := <-existingCh
+		for _, item := range foundItems {
+			existingMap[item.ID] = item
 		}
 	}
-}
 
-func updateChangeIDLoop(client *http.Client, changeCh chan string) {
-	for {
-		select {
-		case changeID := <-changeCh:
-			// Update stored change ID
-			if err := persistChangeID(client, changeID); err != nil {
-				fmt.Printf("Error persisting change ID: %v\n", err)
+	//wrote := false
+	for _, stash := range stashes {
+		var updates []*IndexedItem
+		for _, item := range stash.FormattedItems {
+			prevItem, ok := existingMap[item.ID]
+			if !ok {
+				item.create = true
+				createCount++
+				updates = append(updates, item)
+				continue
+			}
+
+			prevItem.Account = item.Account
+			prevItem.LastUpdated = item.LastUpdated
+			prevItem.CreatedAt = item.CreatedAt
+
+			bytesA, _ := json.Marshal(item)
+			bytesB, _ := json.Marshal(prevItem)
+
+			if bytes.Equal(bytesA, bytesB) {
+				noopCount++
+			} else {
+				/*if !wrote {
+					if _, err := os.Stat("cmp_prev_item.json"); errors.Is(err, os.ErrNotExist) {
+						os.WriteFile("cmp_new_item.json", bytesA, 0644)
+						os.WriteFile("cmp_prev_item.json", bytesB, 0644)
+					}
+					wrote = true
+				}*/
+
+				updateCount++
+				updates = append(updates, item)
 			}
 		}
+
+		filteredStashes = append(filteredStashes, PlayerStash{
+			ID:                stash.ID,
+			AccountName:       stash.AccountName,
+			LastCharacterName: stash.LastCharacterName,
+			Stash:             stash.Stash,
+			StashType:         stash.StashType,
+			League:            stash.League,
+			ItemIDs:           stash.ItemIDs,
+			FormattedItems:    updates,
+			Public:            stash.Public,
+		})
 	}
+
+	fmt.Printf("Looked up %v existing stashes in %v\n", len(stashes), time.Since(start))
+	fmt.Printf("%d creates, %d updates, %d no-ops\n", createCount, updateCount, noopCount)
+
+	return filteredStashes
 }
 
 func getExistingItems(stashes []PlayerStash, existingCh chan []IndexedItem) {
@@ -263,9 +253,34 @@ func getExistingItems(stashes []PlayerStash, existingCh chan []IndexedItem) {
 		}
 	}
 
-	//fmt.Printf("Worker sending %d existing items\n", len(foundItems))
-
 	existingCh <- foundItems
+}
+
+// Compare stash contents against previously seen state to detect item removals
+func diffStashLoop(client *http.Client, inputCh, outputCh chan itemUpdate) {
+	for {
+		select {
+		case update := <-inputCh:
+			// Find removed items by comparing to previous stash contents
+			deletes, err := diffStashes(client, update.stashes)
+			if err != nil {
+				fmt.Printf("Error diffing stashes: %v\n", err)
+				continue
+			}
+			//fmt.Printf("%d deletes\n", len(deletes))
+
+			newStashes := update.filteredStashes
+			if newStashes == nil {
+				newStashes = update.stashes
+			}
+
+			outputCh <- itemUpdate{
+				changeID: update.changeID,
+				stashes:  newStashes,
+				deletes:  deletes,
+			}
+		}
+	}
 }
 
 func diffStashes(client *http.Client, stashes []PlayerStash) ([]string, error) {
@@ -334,6 +349,37 @@ func diffStashes(client *http.Client, stashes []PlayerStash) ([]string, error) {
 	return deletes, nil
 }
 
+// Persist item creates, updates and deletes to the database
+func persistItemLoop(inputCh chan itemUpdate, outputCh chan string) {
+	for {
+		select {
+		case update := <-inputCh:
+			start := time.Now()
+			itemCount := 0
+			for _, stash := range update.stashes {
+				itemCount += len(stash.FormattedItems)
+			}
+
+			var wg sync.WaitGroup
+			numWorkers := 8
+			for i := 0; i < numWorkers; i++ {
+				updateChunk := itemUpdate{
+					stashes: update.stashes[i*len(update.stashes)/numWorkers : (i+1)*len(update.stashes)/numWorkers],
+					deletes: update.deletes[i*len(update.deletes)/numWorkers : (i+1)*len(update.deletes)/numWorkers],
+				}
+
+				wg.Add(1)
+				go persistItems(updateChunk, &wg)
+			}
+			wg.Wait()
+
+			delta := time.Since(start)
+			fmt.Printf("Persisted [%d S | %d I | %d R] in %s\n", len(update.stashes), itemCount, len(update.deletes), delta)
+			outputCh <- update.changeID
+		}
+	}
+}
+
 func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -345,7 +391,6 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 	date := start.Format(ESDateFormat)
 
 	if len(update.stashes) == 0 {
-		fmt.Println("No stashes to persist")
 		return
 	}
 
@@ -397,7 +442,7 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	req, err := http.NewRequest("POST", ESURL+"_bulk", compressed)
+	req, err := http.NewRequest("POST", ESURL+"_bulk?_source=false", compressed)
 	if err != nil {
 		fmt.Printf("Error in request persisting items: %v\n", err)
 		return
@@ -425,5 +470,17 @@ func persistItems(update itemUpdate, wg *sync.WaitGroup) {
 		fmt.Println("Logging request body to index_req.json")
 		os.WriteFile("index_req.json", []byte(rawBody), 0644)
 		return
+	}
+}
+
+func updateChangeIDLoop(client *http.Client, inputCh chan string) {
+	for {
+		select {
+		case changeID := <-inputCh:
+			// Update stored change ID
+			if err := persistChangeID(client, changeID); err != nil {
+				fmt.Printf("Error persisting change ID: %v\n", err)
+			}
+		}
 	}
 }

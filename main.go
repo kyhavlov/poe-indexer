@@ -30,16 +30,28 @@ func main() {
 
 	// Set up the indexer to track items with a price from our chosen league
 	client := &http.Client{Timeout: 30 * time.Second}
-	updateCh := make(chan itemUpdate, 4)
+	fetchCh := make(chan itemUpdate, 4)
+	formatCh := make(chan itemUpdate, 4)
+	prunedItemsCh := make(chan itemUpdate, 4)
 	persistCh := make(chan itemUpdate, 4)
 	changeCh := make(chan string, 4)
-	go diffStashLoop(client, updateCh, persistCh)
+
+	/*
+		Stages of processing:
+		1. Fetch items from POE stash tab api.
+		2. Filter out the items from other leagues and format them for ES.
+		3. (optional) Compare to existing items to avoid no-op writes.
+		4. Diff the stash contents against their last known state to get removed items.
+		5. Persist the created/updated/deleted items to ES.
+		6. Update the last seen change ID and store it in ES.
+	*/
+	go fetchItems(client, fetchCh)
+	go formatStashLoop(fetchCh, formatCh)
+	go lookupItemLoop(formatCh, prunedItemsCh)
+	go diffStashLoop(client, prunedItemsCh, persistCh)
 	go persistItemLoop(persistCh, changeCh)
-	go updateChangeIDLoop(client, changeCh)
-
 	//go expensiveSoldItemAlertLoop()
-
-	fetchItems(client, updateCh)
+	updateChangeIDLoop(client, changeCh)
 
 	// Wait for interrupt signal
 	c := make(chan os.Signal, 1)

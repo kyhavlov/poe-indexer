@@ -257,7 +257,7 @@ type ItemCommon struct {
 	MaxStackSize      int    `json:"maxStackSize,omitempty"`
 
 	Identified  bool            `json:"identified,omitempty"`
-	Corrupted   bool            `json:"corrupted"`
+	Corrupted   bool            `json:"corrupted,omitempty"`
 	Duplicated  bool            `json:"duplicated,omitempty"`
 	Split       bool            `json:"split,omitempty"`
 	Elder       bool            `json:"elder,omitempty"`
